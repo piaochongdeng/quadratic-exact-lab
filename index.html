@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>二次函数精确解析器 · 顶点式 / 交点式 / 一般式互化与最值分析</title>
-<meta name="description" content="输入顶点式、交点式或一般式，自动完成形式互化、顶点与对称轴、判别式与零点、定义域最值分析，全部结果以 Markdown 精确呈现（分数 / 根号）。">
+<title>二次函数精确解析器 · 顶点式 / 交点式 / 一般式互化、最值与三角函数</title>
+<meta name="description" content="输入顶点式、交点式或一般式，自动完成形式互化、顶点与对称轴、判别式与零点、定义域最值分析；并可用 sin / cos / tan 与一条边精确求解直角三角形。全部结果以 Markdown 精确呈现（分数 / 最简根式）。">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -15,7 +15,7 @@
     <div class="brand-mark">y</div>
     <div class="brand-text">
       <h1>二次函数精确解析器</h1>
-      <p>形式互化 · 三点确定函数 · 顶点与对称轴 · 判别式与零点 · 定义域最值 · 最简根式</p>
+      <p>形式互化 · 三点确定函数 · 顶点与对称轴 · 定义域最值 · 三角函数与直角三角形 · 最简根式</p>
     </div>
   </div>
   <div class="header-spacer"></div>
@@ -28,7 +28,12 @@
   </div>
 </header>
 
-<main class="app-grid">
+<nav class="mode-bar" id="mode-bar" role="tablist" aria-label="选择工具">
+  <button type="button" role="tab" data-mode="quad" aria-selected="true">① 二次函数（形式互化 / 最值）</button>
+  <button type="button" role="tab" data-mode="trig" aria-selected="false">② 三角函数 · 直角三角形</button>
+</nav>
+
+<main class="app-grid" id="quad-app">
 
   <!-- ================= 左栏：输入 ================= -->
   <div class="col-left">
@@ -79,7 +84,7 @@
         <p class="hint" style="margin:12px 0 0;font-size:12.5px;line-height:1.85;color:var(--ink-faint)">
           输入框支持：整数 <code>3</code>、分数 <code>-3/4</code>、小数 <code>0.75</code>（小数会被精确换算成分数）。<br>
           快捷键（焦点不在输入框时）：<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> 切换形式 ·
-          <kbd>C</kbd> 复制报告 · <kbd>T</kbd> 切换主题 · <kbd>R</kbd> 重置图像视野。<br>
+          <kbd>C</kbd> 复制报告 · <kbd>T</kbd> 切换主题 · <kbd>R</kbd> 重置图像视野 · <kbd>M</kbd> 切换工具。<br>
           图像操作：滚轮缩放 · 拖动平移 · 悬停读数 · 双击复位。
         </p>
       </div>
@@ -128,10 +133,132 @@
   </div>
 </main>
 
+<!-- ================= 三角函数工作区 ================= -->
+<main class="app-grid" id="trig-app" hidden>
+
+  <div class="col-left">
+    <section class="panel">
+      <div class="panel-head"><h2><span class="idx">1</span>输入已知条件</h2></div>
+      <div class="panel-body">
+
+        <label class="field-label">选择函数</label>
+        <div class="segmented" id="trig-fn-tabs" role="tablist" aria-label="选择三角函数">
+          <button type="button" role="tab" data-fn="sin">sin 正弦</button>
+          <button type="button" role="tab" data-fn="cos">cos 余弦</button>
+          <button type="button" role="tab" data-fn="tan">tan 正切</button>
+        </div>
+
+        <label class="field-label" style="margin-top:14px">函数值从哪里来</label>
+        <div class="segmented" id="trig-src-tabs" role="tablist" aria-label="选择函数值来源">
+          <button type="button" role="tab" data-src="auto">由角度计算</button>
+          <button type="button" role="tab" data-src="user">我输入函数值</button>
+        </div>
+
+        <div id="trig-angle-row" class="trig-field">
+          <label class="field-label" for="trig-angle">角度（单位：度）</label>
+          <input type="text" id="trig-angle" class="mono" autocomplete="off" spellcheck="false" placeholder="如 30、45、60、37.5、45/2">
+          <p class="hint">30° 与 45° 的整数倍是特殊角，会直接给出精确的分数 / 最简根式；其他角度按下面的精度给近似值。</p>
+        </div>
+
+        <div id="trig-value-row" class="trig-field">
+          <label class="field-label" for="trig-value">你已知的函数值</label>
+          <input type="text" id="trig-value" class="mono" autocomplete="off" spellcheck="false" placeholder="如 0.6、3/5、0.7071">
+          <p class="hint">填你知道的那个值（小数、分数都行）。若它是有理数，程序会精确反推出另外两个函数值，例如 sinθ = 0.6 → cosθ = 4/5、tanθ = 3/4。</p>
+        </div>
+
+        <div class="trig-field">
+          <label class="field-label" for="trig-side-kind">已知哪一条边</label>
+          <select id="trig-side-kind">
+            <option value="opposite">对边 o（BC，角 θ 的对面）</option>
+            <option value="adjacent">邻边 a（AC，贴着角 θ 的那条直角边）</option>
+            <option value="hypotenuse">斜边 h（AB，直角的对面）</option>
+          </select>
+          <label class="field-label" for="trig-side">这条边的长度</label>
+          <input type="text" id="trig-side" class="mono" autocomplete="off" spellcheck="false" placeholder="如 3、5/2、0.75">
+        </div>
+
+        <div class="trig-field">
+          <label class="field-label" for="trig-digits">小数精度（近似值保留几位小数）</label>
+          <div class="digits-row">
+            <input type="number" id="trig-digits" min="0" max="10" step="1" value="4">
+            <span class="hint">可填 0 ~ 10，精确值不受影响</span>
+          </div>
+        </div>
+
+        <div class="hint" id="trig-fn-hint" style="margin-top:14px;font-size:13px"></div>
+
+        <div class="header-actions" style="margin-top:14px;gap:8px">
+          <button class="btn btn-sm" id="trig-btn-copy" title="复制三角函数报告">复制 Markdown</button>
+          <button class="btn btn-sm" id="trig-btn-download" title="下载 .md 文件">下载 .md</button>
+          <button class="btn btn-sm" id="trig-btn-print" title="打印或导出 PDF">打印</button>
+          <button class="btn btn-sm" id="trig-btn-share" title="复制可还原当前输入的链接">分享链接</button>
+        </div>
+        <div class="err-slot" id="trig-err-slot"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2><span class="idx">2</span>示例</h2>
+        <div class="view-tabs" style="margin-left:auto">
+          <button type="button" id="trig-btn-example-prev" title="上一个示例">◀ 上一个</button>
+          <button type="button" id="trig-btn-example-next" title="下一个示例">下一个 ▶</button>
+        </div>
+      </div>
+      <div class="panel-body tight">
+        <label class="field-label" for="trig-examples">载入示例</label>
+        <select id="trig-examples"></select>
+        <p class="hint" style="margin:12px 0 0;font-size:12.5px;line-height:1.85;color:var(--ink-faint)">
+          三角形的三条边会**按真实比例**绘制，数值再大也会等比缩放，图形大小始终一致。<br>
+          已知边长的那条边会用深色加粗描出来，角 θ 的位置画弧线，直角处画方角标记。
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-right">
+    <section class="panel">
+      <div class="panel-head">
+        <h2><span class="idx">3</span>直角三角形与单位圆</h2>
+        <div class="view-tabs" style="margin-left:auto">
+          <button type="button" id="trig-btn-reset-view" title="重绘两张图">重绘</button>
+        </div>
+      </div>
+      <div class="trig-plot-grid">
+        <div class="plot-wrap trig-plot-wrap">
+          <canvas id="tri-plot" aria-label="直角三角形（按真实比例等比缩放绘制）"></canvas>
+        </div>
+        <div class="plot-wrap trig-plot-wrap">
+          <canvas id="unit-plot" aria-label="单位圆与三角函数线"></canvas>
+        </div>
+      </div>
+      <div class="chips" id="trig-chips"></div>
+      <div class="plot-legend">
+        <span class="legend-item"><span class="legend-swatch" style="background:#2b6cb0"></span>斜边 / 邻边</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#b45309"></span>对边 / 角 θ</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#15803d"></span>tan θ（切线截段）</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#23272e"></span>顶点与终边端点</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2><span class="idx">4</span>Markdown 解析报告</h2>
+        <div class="view-tabs" id="trig-view-tabs">
+          <button type="button" data-view="rendered" aria-selected="true">渲染视图</button>
+          <button type="button" data-view="source" aria-selected="false">Markdown 源码</button>
+        </div>
+      </div>
+      <article class="markdown-body" id="trig-rendered"></article>
+      <pre class="markdown-source" id="trig-source" hidden></pre>
+    </section>
+  </div>
+</main>
+
 <footer class="app-footer">
   <p>
-    所有计算基于<strong>有理数</strong>与<strong>二次根式</strong>的精确运算：不是整数的结果一律用分数、根号表示，绝不依赖浮点近似；
-    报告中的小数均标注为「近似值」，仅供直观参考。数学排版由本地 KaTeX 完成，无需联网。
+    所有计算基于<strong>有理数</strong>与<strong>最简二次根式</strong>的精确运算：不是整数的结果一律用分数、根号表示，绝不依赖浮点近似；
+    报告中的小数均标注为「近似值」，仅供直观参考，且小数位数可在左栏自行设定。数学排版由本地 KaTeX 完成，无需联网。
   </p>
 </footer>
 
@@ -142,5 +269,8 @@
 <script src="report.js"></script>
 <script src="markdown.js"></script>
 <script src="ui.js"></script>
+<script src="trig.js"></script>
+<script src="trig-report.js"></script>
+<script src="trig-ui.js"></script>
 </body>
 </html>

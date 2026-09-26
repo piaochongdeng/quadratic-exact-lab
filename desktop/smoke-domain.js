@@ -20,6 +20,10 @@ const OUT = path.join(__dirname, 'smoke-domain-result.json');
 app.disableHardwareAcceleration();
 
 const SCRIPT = `(async function () {
+  /* 本套自测只关心二次函数工作区，先强制切过去 */
+  try { localStorage.setItem('qel-mode', 'quad'); } catch (e) { /* 忽略 */ }
+  window.QuadLab.setMode('quad');
+
   var out = {};
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   var el = {

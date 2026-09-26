@@ -29,6 +29,11 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 2500));
 
   const report = await win.webContents.executeJavaScript(`(function(){
+    /* 自测必须从二次函数工作区开始：工作区会记忆到 localStorage，
+       上一次跑三角函数自测可能把它留在 trig，导致画布被隐藏、尺寸为 0。 */
+    try { localStorage.setItem('qel-mode', 'quad'); } catch (e) { /* 忽略 */ }
+    window.QuadLab.setMode('quad');
+
     var out = {};
     out.hasDesktopBridge = !!window.QuadDesktop;
     out.hasApi = !!window.QuadLab;

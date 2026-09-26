@@ -273,9 +273,63 @@
     });
   }
 
+  /* ================= 工作区切换（二次函数 / 三角函数） ================= */
+
+  var AppMode = {
+    KEY: 'qel-mode',
+    current: function () {
+      var m = document.documentElement.getAttribute('data-mode');
+      return m === 'trig' ? 'trig' : 'quad';
+    },
+    detect: function () {
+      /* 分享链接以 trig: 开头时直接进三角函数工作区 */
+      var raw = location.hash ? location.hash.slice(1) : '';
+      if (raw.slice(0, 5) === 'trig:') return 'trig';
+      if (raw.length > 1) return 'quad';
+      var saved = null;
+      try { saved = localStorage.getItem('qel-mode'); } catch (e) { /* 忽略 */ }
+      return saved === 'trig' ? 'trig' : 'quad';
+    },
+    apply: function (mode) {
+      var m = (mode === 'trig') ? 'trig' : 'quad';
+      document.documentElement.setAttribute('data-mode', m);
+      if (el.quadApp) el.quadApp.hidden = (m !== 'quad');
+      if (el.trigApp) el.trigApp.hidden = (m !== 'trig');
+      if (el.modeBar) {
+        Array.prototype.forEach.call(el.modeBar.querySelectorAll('button'), function (b) {
+          b.setAttribute('aria-selected', b.dataset.mode === m ? 'true' : 'false');
+        });
+      }
+      try { localStorage.setItem('qel-mode', m); } catch (e) { /* 忽略 */ }
+      /* 被隐藏时画布的尺寸是 0，切回来必须重新量一次。
+         这里刻意不用 requestAnimationFrame：隐藏窗口里它会被节流，
+         导致画布一直停在 300×150 的默认尺寸。同步重绘最可靠。 */
+      if (m === 'quad') {
+        Plot.resize(); Plot.fit(); Plot.draw();
+      } else if (window.TrigLab && window.TrigLab.redraw) {
+        window.TrigLab.redraw();
+      }
+      return m;
+    },
+    set: function (mode) {
+      var m = AppMode.apply(mode);
+      /* 切换工作区时把 hash 换成当前工作区的状态，避免链接还原到另一个工作区 */
+      if (m === 'trig') {
+        if (window.TrigLab && window.TrigLab.getState) {
+          try { history.replaceState(null, '', '#trig:' + encodeURIComponent(JSON.stringify(window.TrigLab.getState()))); } catch (e) { /* 忽略 */ }
+        }
+      } else {
+        try { writeHash(collectInput()); } catch (e) { /* 忽略 */ }
+      }
+      return m;
+    }
+  };
+
   /* ================= URL 状态 ================= */
 
   function writeHash(input) {
+    /* 三角函数工作区有自己的 hash 前缀（trig:），两个工作区不能互相覆盖 */
+    if (AppMode.current() !== 'quad') return;
     try {
       var encoded = encodeURIComponent(JSON.stringify(input));
       if (location.hash.slice(1) !== encoded) history.replaceState(null, '', '#' + encoded);
@@ -813,6 +867,12 @@
   /* ================= 事件绑定 ================= */
 
   function bind() {
+    if (el.modeBar) {
+      Array.prototype.forEach.call(el.modeBar.querySelectorAll('button'), function (b) {
+        b.addEventListener('click', function () { AppMode.set(b.dataset.mode); });
+      });
+    }
+
     Array.prototype.forEach.call(el.formTabs.querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () {
         state.form = b.dataset.form;
@@ -946,12 +1006,16 @@
       } else if (k === 'r') { Plot.fit(); Plot.draw(); }
       else if (k === 't') { el.btnTheme.click(); }
       else if (k === 'c') { el.btnCopy.click(); }
+      else if (k === 'm') { AppMode.set(AppMode.current() === 'quad' ? 'trig' : 'quad'); }
     });
   }
 
   /* ================= 启动 ================= */
 
   function cache() {
+    el.modeBar = $('mode-bar');
+    el.quadApp = $('quad-app');
+    el.trigApp = $('trig-app');
     el.formTabs = $('form-tabs');
     el.coefGrid = $('coef-grid');
     el.domainInterval = $('domain-interval');
@@ -992,7 +1056,10 @@
     });
     el.examples.selectedIndex = 0;
 
-    var fromHash = readHash();
+    var mode = AppMode.detect();
+    AppMode.apply(mode);
+
+    var fromHash = (mode === 'quad') ? readHash() : null;
     if (fromHash) applyState(fromHash);
 
     syncFormTabs();
@@ -1088,7 +1155,14 @@
     /** 报告当前是否可用 */
     isReady: function () { return !!(state.report && state.report.ok); },
 
-    version: '1.2.0'
+    /** 供三角函数工作区复用的提示条 */
+    toast: function (msg) { toast(msg); },
+
+    /** 工作区：'quad'（二次函数）或 'trig'（三角函数） */
+    setMode: function (mode) { return AppMode.set(mode); },
+    getMode: function () { return AppMode.current(); },
+
+    version: '1.3.0'
   };
 
   /* ================= 桌面版菜单事件 ================= */
@@ -1097,6 +1171,8 @@
     if (!Desktop) return;
     document.documentElement.classList.add('is-desktop');
     var map = {
+      'menu:mode-quad': function () { window.QuadLab.setMode('quad'); },
+      'menu:mode-trig': function () { window.QuadLab.setMode('trig'); },
       'menu:form-general': function () { window.QuadLab.setForm('general'); },
       'menu:form-vertex': function () { window.QuadLab.setForm('vertex'); },
       'menu:form-factored': function () { window.QuadLab.setForm('factored'); },

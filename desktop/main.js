@@ -226,6 +226,9 @@ function buildMenu() {
         { label: '交点式  y = a(x−x₁)(x−x₂)', accelerator: 'CmdOrCtrl+3', click: send('menu:form-factored') },
         { label: '三点确定函数', accelerator: 'CmdOrCtrl+4', click: send('menu:form-points') },
         { type: 'separator' },
+        { label: '工作区：二次函数（形式互化 / 最值）', accelerator: 'CmdOrCtrl+5', click: send('menu:mode-quad') },
+        { label: '工作区：三角函数 · 直角三角形', accelerator: 'CmdOrCtrl+6', click: send('menu:mode-trig') },
+        { type: 'separator' },
         { label: '上一个示例', accelerator: 'CmdOrCtrl+Up', click: send('menu:example-prev') },
         { label: '下一个示例', accelerator: 'CmdOrCtrl+Down', click: send('menu:example-next') }
       ]

@@ -114,6 +114,104 @@ body {
 .header-spacer { flex: 1 1 auto; }
 .header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* ============ 工作区切换条 ============ */
+.mode-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 26px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 19;
+}
+
+.mode-bar button {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 7px 15px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mode-bar button:hover { color: var(--ink); background: var(--card-soft); }
+.mode-bar button[aria-selected="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ============ 三角函数工作区 ============ */
+.trig-field { margin-top: 14px; }
+.trig-field .field-label { margin-bottom: 6px; }
+.trig-field .hint {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--ink-faint);
+}
+
+.digits-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.digits-row input[type="number"] {
+  width: 92px;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13.5px;
+}
+.digits-row input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.digits-row .hint { margin: 0; font-size: 12.5px; color: var(--ink-faint); }
+
+/* 两张画布：窄屏时自动竖排，绝不重叠、不溢出 */
+.trig-plot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 14px 0;
+}
+
+@media (max-width: 860px) { .trig-plot-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.trig-plot-wrap {
+  position: relative;
+  height: 300px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--card);
+}
+
+.trig-plot-wrap canvas { display: block; width: 100%; height: 100%; }
+
+@media (max-width: 860px) { .trig-plot-wrap { height: 260px; } }
+
+/* 三角函数工作区的示例步进按钮复用 view-tabs 外观，但需要可点 */
+.view-tabs button#trig-btn-example-prev,
+.view-tabs button#trig-btn-example-next,
+.view-tabs button#trig-btn-reset-view { white-space: nowrap; }
+
+/* 隐藏的工作区不参与布局，也避免画布尺寸量到 0 */
+[hidden] { display: none !important; }
+
 /* ============ 主栅格 ============ */
 .app-grid {
   display: grid;

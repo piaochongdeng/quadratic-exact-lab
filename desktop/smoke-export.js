@@ -33,6 +33,11 @@ app.whenReady().then(async () => {
 
   const result = {};
 
+  /* 工作区会记忆到 localStorage：本套自测只关心二次函数工作区，先强制切过去，
+     否则画布被隐藏后尺寸为 0，PNG 导出会失败。 */
+  await win.webContents.executeJavaScript("try{localStorage.setItem('qel-mode','quad');}catch(e){}; window.QuadLab.setMode('quad');");
+  await new Promise((r) => setTimeout(r, 600));
+
   /* 1) Markdown 导出：走 preload → IPC → 写盘 */
   const mdSave = await win.webContents.executeJavaScript(
     "window.QuadDesktop.saveText({ title: 't', defaultPath: 'report.md', content: window.QuadLab.getMarkdown() })"
