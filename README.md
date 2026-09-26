@@ -70,6 +70,18 @@ npx --yes serve .
 python -m http.server 8080
 ```
 
+### 镜像仓库（Gitee）
+
+GitHub 访问不畅时，可用仓库内的一键脚本同步到 Gitee：
+
+```powershell
+# 先在 https://gitee.com/projects/new 建一个名为 quadratic-exact-lab 的【空】仓库
+powershell -ExecutionPolicy Bypass -File scripts\push-gitee.ps1
+```
+
+脚本会自动添加 `gitee` remote、探测仓库是否已建好、推送 `main` 与全部标签。
+Gitee 单个附件上限 100 MB，免安装版 zip 约 126 MB 会超限，发行版建议只传安装版 exe 或分卷压缩。
+
 ### 从源码构建桌面版
 
 ```powershell
