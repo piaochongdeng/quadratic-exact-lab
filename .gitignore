@@ -1,0 +1,14 @@
+﻿# 临时探针 / 调试产物
+_*.js
+_*.html
+_*.png
+!docs/*.png
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+.idea/
+.vscode/
+node_modules/

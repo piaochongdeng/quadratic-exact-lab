@@ -1,0 +1,146 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>二次函数精确解析器 · 顶点式 / 交点式 / 一般式互化与最值分析</title>
+<meta name="description" content="输入顶点式、交点式或一般式，自动完成形式互化、顶点与对称轴、判别式与零点、定义域最值分析，全部结果以 Markdown 精确呈现（分数 / 根号）。">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">y</div>
+    <div class="brand-text">
+      <h1>二次函数精确解析器</h1>
+      <p>形式互化 · 三点确定函数 · 顶点与对称轴 · 判别式与零点 · 定义域最值 · 最简根式</p>
+    </div>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="header-actions">
+    <button class="btn btn-sm" id="btn-copy" title="复制完整 Markdown 报告（快捷键 C）">复制 Markdown</button>
+    <button class="btn btn-sm" id="btn-download" title="下载 .md 文件">下载 .md</button>
+    <button class="btn btn-sm" id="btn-print" title="打印或导出 PDF">打印</button>
+    <button class="btn btn-sm" id="btn-share" title="复制可还原当前输入的链接">分享链接</button>
+    <button class="btn btn-sm btn-icon" id="btn-theme" title="切换深色 / 浅色主题（快捷键 T）">◐</button>
+  </div>
+</header>
+
+<main class="app-grid">
+
+  <!-- ================= 左栏：输入 ================= -->
+  <div class="col-left">
+    <section class="panel">
+      <div class="panel-head"><h2><span class="idx">1</span>输入已知条件</h2></div>
+      <div class="panel-body">
+
+        <div class="segmented" id="form-tabs" role="tablist" aria-label="选择输入形式">
+          <button type="button" role="tab" data-form="general">一般式</button>
+          <button type="button" role="tab" data-form="vertex">顶点式</button>
+          <button type="button" role="tab" data-form="factored">交点式</button>
+          <button type="button" role="tab" data-form="points">三点</button>
+        </div>
+
+        <div class="coef-grid" id="coef-grid"></div>
+
+        <div class="domain-block">
+          <label class="field-label">定义域</label>
+          <div class="radio-row">
+            <label class="radio-pill"><input type="radio" name="dom" value="all" checked>全体实数 ℝ</label>
+            <label class="radio-pill"><input type="radio" name="dom" value="interval">自定义区间</label>
+          </div>
+
+          <div id="domain-interval">
+            <div class="domain-row">
+              <button type="button" class="bracket-btn" id="lb" title="点击切换开 / 闭">(</button>
+              <input type="text" id="lval" class="mono" autocomplete="off" spellcheck="false" placeholder="左端点，如 -1 或 -3/2">
+              <label class="inf-toggle" title="勾选表示 −∞"><input type="checkbox" id="linf">−∞</label>
+            </div>
+            <div class="domain-row">
+              <button type="button" class="bracket-btn" id="rb" title="点击切换开 / 闭">)</button>
+              <input type="text" id="rval" class="mono" autocomplete="off" spellcheck="false" placeholder="右端点，如 3 或 7/2">
+              <label class="inf-toggle" title="勾选表示 +∞"><input type="checkbox" id="rinf">+∞</label>
+            </div>
+            <div class="interval-preview" id="interval-preview"></div>
+          </div>
+        </div>
+
+        <div class="err-slot" id="err-slot"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2><span class="idx">2</span>示例与说明</h2></div>
+      <div class="panel-body tight">
+        <label class="field-label" for="examples">载入示例</label>
+        <select id="examples"></select>
+        <p class="hint" style="margin:12px 0 0;font-size:12.5px;line-height:1.85;color:var(--ink-faint)">
+          输入框支持：整数 <code>3</code>、分数 <code>-3/4</code>、小数 <code>0.75</code>（小数会被精确换算成分数）。<br>
+          快捷键（焦点不在输入框时）：<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> 切换形式 ·
+          <kbd>C</kbd> 复制报告 · <kbd>T</kbd> 切换主题 · <kbd>R</kbd> 重置图像视野。<br>
+          图像操作：滚轮缩放 · 拖动平移 · 悬停读数 · 双击复位。
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= 右栏：图像 + 报告 ================= -->
+  <div class="col-right">
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2><span class="idx">3</span>函数图像</h2>
+      </div>
+      <div class="plot-wrap">
+        <canvas id="plot" aria-label="二次函数图像"></canvas>
+        <div class="plot-tooltip" id="plot-tooltip"></div>
+        <div class="plot-toolbar">
+          <button class="btn btn-sm btn-icon" id="btn-zoom-in" title="放大">＋</button>
+          <button class="btn btn-sm btn-icon" id="btn-zoom-out" title="缩小">－</button>
+          <button class="btn btn-sm" id="btn-reset" title="恢复默认视野（快捷键 R）">复位</button>
+        </div>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="plot-legend">
+        <span class="legend-item"><span class="legend-swatch" style="background:#2b6cb0"></span>定义域内的图像</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#d3ccc1"></span>定义域外（虚线）</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#b45309"></span>顶点 / 最值点</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#15803d"></span>零点（与 x 轴交点）</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#5c6572"></span>与 y 轴交点</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#2b6cb0;border:2px solid #2b6cb0;background:transparent"></span>定义域端点（空心=开）</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2><span class="idx">4</span>Markdown 解析报告</h2>
+        <div class="view-tabs" id="view-tabs">
+          <button type="button" data-view="rendered" aria-selected="true">渲染视图</button>
+          <button type="button" data-view="source" aria-selected="false">Markdown 源码</button>
+        </div>
+      </div>
+      <article class="markdown-body" id="rendered"></article>
+      <pre class="markdown-source" id="source" hidden></pre>
+    </section>
+
+  </div>
+</main>
+
+<footer class="app-footer">
+  <p>
+    所有计算基于<strong>有理数</strong>与<strong>二次根式</strong>的精确运算：不是整数的结果一律用分数、根号表示，绝不依赖浮点近似；
+    报告中的小数均标注为「近似值」，仅供直观参考。数学排版由本地 KaTeX 完成，无需联网。
+  </p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/katex/katex.min.js"></script>
+<script src="engine.js"></script>
+<script src="report.js"></script>
+<script src="markdown.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
