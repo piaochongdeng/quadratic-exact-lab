@@ -9,7 +9,7 @@
   "scripts": {
     "desktop": "electron .",
     "desktop:dev": "electron . --enable-logging",
-    "dist": "electron-builder --win --publish never && node desktop/rename-artifacts.js",
+    "dist": "electron-builder --win --publish never",
     "dist:portable": "electron-builder --win zip --publish never",
     "dist:installer": "electron-builder --win nsis --publish never"
   },
@@ -57,7 +57,7 @@
         }
       ],
       "icon": "desktop/icon.ico",
-      "artifactName": "二次函数精确解析器-${version}-${arch}.${ext}"
+      "artifactName": "quadratic-exact-lab-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -66,7 +66,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "二次函数精确解析器",
-      "artifactName": "二次函数精确解析器-${version}-安装版-${arch}.${ext}",
+      "artifactName": "quadratic-exact-lab-${version}-setup-${arch}.${ext}",
       "uninstallDisplayName": "二次函数精确解析器 ${version}",
       "deleteAppDataOnUninstall": false
     }

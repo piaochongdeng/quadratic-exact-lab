@@ -53,8 +53,8 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `二次函数精确解析器-1.2.0-免安装版-x64.zip` | 解压后双击 `二次函数精确解析器.exe` 即可，不写注册表 |
-| `二次函数精确解析器-1.2.0-安装版-x64.exe` | 安装程序，可自选目录，自动创建桌面与开始菜单快捷方式 |
+| `quadratic-exact-lab-1.2.0-x64.zip` | 免安装版：解压后双击 `二次函数精确解析器.exe` 即可，不写注册表 |
+| `quadratic-exact-lab-1.2.0-setup-x64.exe` | 安装版：安装程序，可自选目录，自动创建桌面与开始菜单快捷方式 |
 
 两种方式都**不需要安装 Node.js 或任何运行库**，全程离线。
 
@@ -76,6 +76,8 @@ python -m http.server 8080
 npm install          # 安装 Electron 与 electron-builder
 npm run desktop      # 本地直接运行（开发用）
 npm run dist         # 打包出免安装 ZIP + 安装程序，产物在 dist-desktop/
+                     #   quadratic-exact-lab-<版本>-x64.zip        （免安装版）
+                     #   quadratic-exact-lab-<版本>-setup-x64.exe  （安装版）
 ```
 
 国内网络如果下载 Electron 缓慢，可先设置镜像：
