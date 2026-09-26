@@ -1,0 +1,18 @@
+# 换行符：仓库里 gradlew 必须保持 LF，否则 Linux / macOS 上执行会报
+#   /bin/sh^M: bad interpreter
+# Windows 上跑的是 android/gradlew.bat，用 CRLF 才顺眼。
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件不要做换行转换
+*.png binary
+*.jpg binary
+*.ico binary
+*.jar binary
+*.zip binary
+*.exe binary
+*.apk binary
+*.woff2 binary

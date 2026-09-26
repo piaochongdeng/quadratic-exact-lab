@@ -20,3 +20,17 @@ desktop.ini
 *.log
 .idea/
 .vscode/
+
+# Android 构建产物与本地配置（由 scripts/make-www.js + gradle 生成）
+www/
+android/local.properties
+android/keystore.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/.cxx/
+desktop/smoke-mobile-result.json
+
+# 本地交接说明：含本机路径与磁盘细节，不属于公开项目内容。
+# 留在工作区方便查阅，但不进仓库（想提交就删掉这一行）。
+docs/ANDROID-HANDOFF.md

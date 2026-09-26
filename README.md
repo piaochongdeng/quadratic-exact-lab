@@ -8,8 +8,8 @@
 非特殊角按自定义精度给近似值）或直接输入已知函数值反推另外两个，再给出任意一条边长，
 自动画出**按比例缩放后总尺寸恒定**的直角三角形并解出其余各边、周长与面积。
 
-既可以**双击 `index.html` 在浏览器里用**，也可以用打包好的 **Windows 桌面应用**（免安装 ZIP 或安装程序）。
-**所有结果都以精确值呈现：凡不是整数的数值，一律用分数或根号表示**，绝不依赖浮点近似。
+既可以**双击 `index.html` 在浏览器里用**，也可以用打包好的 **Windows 桌面应用**（免安装 ZIP 或安装程序），
+或者安装 **Android 版 APK**（完全离线，不申请任何权限）。**所有结果都以精确值呈现：凡不是整数的数值，一律用分数或根号表示**，绝不依赖浮点近似。
 
 ![预览](docs/preview-light.png)
 
@@ -35,6 +35,7 @@
 | 图像可视化 | Canvas 绘制抛物线，标注顶点、零点、定义域端点（空心=开、实心=闭）、对称轴、最值点；定义域外的部分用灰色虚线表示 |
 | 离线可用 | 数学排版使用**随包携带的 KaTeX**，无需联网，双击 `index.html` 即可使用 |
 | **桌面应用** | 提供 Windows 免安装版（ZIP）与安装版（NSIS），带原生菜单、原生保存对话框、文件关联式导出；同样完全离线 |
+| **Android 应用** | WebView 壳 + 移动端适配，APK 约 0.7 MB、**不申请任何权限**、不依赖任何第三方库；报告导出到系统「下载」目录、支持系统打印（可另存为 PDF）。与网页版共用同一份 JS，计算逻辑一行未改 |
 | **三角函数值** | 选 `sin` / `cos` / `tan` 并输入角度：`30°` / `45°` 的整数倍（含负角、`390°` 这类超出一圈的角度）直接给**精确分数与最简根式**，其余角度按自定义小数位给近似值 |
 | **由函数值反推** | 直接输入已知的 `sinθ` / `cosθ` / `tanθ`（支持分数与小数），精确反推另外两个函数值，并自动判断正负号与象限信息 |
 | **直角三角形求解** | 给出角度与任意一条边（对边 / 邻边 / 斜边），解出其余各边、周长与面积；能精确就精确，不能精确就按精度给近似值 |
@@ -55,6 +56,8 @@
 - **一键出图**：可以把「直角三角形 + 单位圆」两张画布**合并导出成一张 PNG**。
 - **恒等式自检**：报告里会代回验证 `sin²θ + cos²θ = 1`、`tanθ = sinθ / cosθ`；若同时填了角度和函数值，还会交叉检验两者是否一致并给出相差多少度。
 - **桌面版专属**：原生菜单（文件 / 编辑 / 输入形式 / 视图 / 帮助）、`Ctrl+S` 直接保存 Markdown、`Ctrl+P` 导出 A4 PDF、`Ctrl+Shift+E` 导出图像 PNG、`Ctrl+O` 载入输入 JSON、窗口大小与位置记忆、单实例运行。
+- **手机适配**：触控目标统一 ≥ 44 px、输入框字号 ≥ 16 px（避免聚焦时自动放大）、刘海屏安全区、窄屏页头瘦身（手机竖屏 103 px，原为 209 px）、超窄屏切换条改用短标签；二次函数画布支持**双指捏合缩放**。
+- **Android 版专属**：报告与图像导出到系统「下载」目录（`MediaStore`，无需存储权限）、系统打印 / 另存为 PDF、原生剪贴板、「载入数据」走系统文件选择器。
 
 ---
 
@@ -66,8 +69,9 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `quadratic-exact-lab-1.2.0-x64.zip` | 免安装版：解压后双击 `二次函数精确解析器.exe` 即可，不写注册表 |
-| `quadratic-exact-lab-1.2.0-setup-x64.exe` | 安装版：安装程序，可自选目录，自动创建桌面与开始菜单快捷方式 |
+| `quadratic-exact-lab-1.4.0-x64.zip` | 免安装版：解压后双击 `二次函数精确解析器.exe` 即可，不写注册表 |
+| `quadratic-exact-lab-1.4.0-setup-x64.exe` | 安装版：安装程序，可自选目录，自动创建桌面与开始菜单快捷方式 |
+| `quadratic-exact-lab-1.4.0.apk` | Android 版（Android 7.0+），手机直接安装 |
 
 两种方式都**不需要安装 Node.js 或任何运行库**，全程离线。
 
@@ -82,6 +86,25 @@
 npx --yes serve .
 python -m http.server 8080
 ```
+
+### 方式三：Android
+
+到 [Releases](https://github.com/piaochongdeng/quadratic-exact-lab/releases) 下载
+`quadratic-exact-lab-1.4.0.apk` 直接安装即可（需允许「安装未知来源应用」）。
+
+- 支持 **Android 7.0（API 24）及以上**
+- **不申请任何权限**，全程离线
+- 报告与图像导出到系统「下载」目录，「打印」可另存为 PDF
+
+从源码构建（需要 JDK 17 + Android SDK 35）：
+
+```bash
+node scripts/make-www.js          # 把运行时文件挑进 www/（构建产物，不进仓库）
+py scripts/make-android-icons.py  # 从 desktop/icon.png 生成 mipmap（需要 Pillow）
+cd android && ./gradlew assembleDebug
+```
+
+细节、取舍与踩坑见 [`docs/ANDROID.md`](docs/ANDROID.md)。
 
 ### 镜像仓库（Gitee）
 
@@ -139,16 +162,26 @@ quadratic-exact-lab/
 ├─ trig-report.js      三角函数报告（纯函数，结构同 report.js）
 ├─ trig-ui.js          三角函数界面逻辑：直角三角形与单位圆两张 Canvas、示例、状态
 ├─ package.json        桌面版构建配置（electron-builder）
+├─ android/            Android 应用外壳（WebView 壳，不依赖任何第三方库）
+│  ├─ app/src/main/java/cn/piaochong/quadraticexactlab/MainActivity.java   WebView + 原生桥（导出 / 剪贴板 / 打印 / 文件选择）
+│  ├─ app/src/main/res/           图标（mipmap-*）、主题、字符串
+│  ├─ app/build.gradle            包名 / SDK 版本 / 签名 / assets 指向 ../www
+│  └─ gradle/wrapper/             Gradle 8.9（走腾讯云镜像）
+├─ scripts/
+│  ├─ make-www.js      从仓库挑出运行时文件生成 www/（会兜底检查有没有混进 desktop/、node_modules/）
+│  ├─ make-android-icons.py  由 desktop/icon.png 派生全套 Android 图标
+│  └─ push-gitee.ps1   一键同步到 Gitee 镜像
+├─ www/                ↑ 由 make-www.js 生成的 Android assets（gitignore）
 ├─ desktop/            桌面应用外壳
 │  ├─ main.js          主进程：窗口、原生菜单、导出对话框、单实例
 │  ├─ preload.js       最小 IPC 桥（contextIsolation，渲染进程无 Node）
 │  ├─ about.html       关于 / 快捷键一览窗口
 │  ├─ make-icon.py     图标生成脚本（Pillow 绘制，无外部素材）
-│  ├─ icon.png         应用图标（512×512）
+│  ├─ icon.png         应用图标（512×512，Android 图标也由它派生）
 │  ├─ icon.ico         应用图标（多尺寸）
-│  └─ smoke*.js        桌面版端到端冒烟测试
+│  └─ smoke*.js        端到端冒烟测试（含 smoke-mobile.js 的手机尺寸布局回归）
 ├─ vendor/katex/       随包携带的 KaTeX（离线数学排版）
-├─ docs/               预览截图
+├─ docs/               预览截图与 Android 版说明
 └─ tests/              自测脚本（Node.js 运行）
 ```
 
@@ -186,7 +219,13 @@ node tests/trig.test.js        # 三角函数 88 项：特殊角精确性、最�
                                #   直角三角形精确 / 近似求解、24 份报告的 KaTeX 排版校验、画布数据完整性
 node tests/markdown.test.js    # Markdown 渲染器：标题/列表/表格/引用/公式
 node tests/dom-check.js        # 页面与脚本的 id 引用一致性
-node tests/desktop.test.js     # 桌面版端到端（需先 npm install；未装 Electron 会自动跳过）
+node tests/desktop.test.js     # 桌面版端到端 31 项（需先 npm install；未装 Electron 会自动跳过）
+                               #   含手机尺寸布局回归：390×844 / 320×640 下的吸顶重叠、触控目标、
+                               #   输入框字号、横向溢出、双指捏合缩放
+node tests/android.test.js     # Android 端到端 15 项（需要一台已连接设备；没有设备会自动跳过）
+                               #   在真实 WebView 里验证：assets 加载、离线 KaTeX 字体、原生桥、
+                               #   真机 viewport 布局、三张画布、导出真的落盘并逐字符比对、
+                               #   零权限申请、无崩溃日志
 ```
 
 也可以一次跑完：
