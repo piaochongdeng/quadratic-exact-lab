@@ -34,3 +34,8 @@ desktop/smoke-mobile-result.json
 # 本地交接说明：含本机路径与磁盘细节，不属于公开项目内容。
 # 留在工作区方便查阅，但不进仓库（想提交就删掉这一行）。
 docs/ANDROID-HANDOFF.md
+*.jks
+*.keystore
+
+# 本机备忘（含签名口令），永远不要提交
+*.local.txt

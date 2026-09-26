@@ -12,7 +12,8 @@
  *   · 原生桥 window.QuadAndroid 是否挂上、导出是否真的落盘
  *   · 真实手机的 viewport / 安全区下，页面是否还有重叠或横向溢出
  *
- * 依赖：一台已连接（adb devices 可见）且已安装 debug APK 的设备。
+ * 依赖：一台已连接（adb devices 可见）的设备。默认验 debug 包（CDP 全量断言），
+ *       设 ANDROID_APK=<正式包路径> 则降级为 adb 层检查（正式包不开远程调试）。
  * 没有设备时打印 skip 并以 0 退出，不影响纯网页版的测试套件。
  *
  * 实现方式：adb forward 到 WebView 的 devtools socket，然后用 CDP
@@ -31,7 +32,11 @@ const SDK = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || 'D:/andr
 const ADB = process.platform === 'win32'
   ? path.join(SDK, 'platform-tools', 'adb.exe')
   : path.join(SDK, 'platform-tools', 'adb');
-const APK = path.join(ROOT, 'android', 'app', 'build', 'outputs', 'apk', 'debug',
+/* 默认验 debug 包；想验签名过的正式包就设 ANDROID_APK=<绝对路径>：
+     set ANDROID_APK=D:\...\quadratic-exact-lab-1.4.0-release.apk
+   正式包不开 WebView 远程调试（那是 debug 专属），所以这条路径验的是
+   「页面能起来、布局对、导出真落盘」，验不了 CDP —— 脚本会自动降级。 */
+const APK = process.env.ANDROID_APK || path.join(ROOT, 'android', 'app', 'build', 'outputs', 'apk', 'debug',
   'quadratic-exact-lab-1.4.0-debug.apk');
 const PKG = 'cn.piaochong.quadraticexactlab';
 const PORT = 9222;
@@ -74,8 +79,19 @@ const A = function (args, opts) { return adb(['-s', serial].concat(args), opts);
 /* ---------- 1. 装包并启动 ---------- */
 
 function ensureInstalled() {
-  if (!fs.existsSync(APK)) throw new Error('没有找到 debug APK：' + APK + '（先跑 gradlew assembleDebug）');
-  A(['install', '-r', APK]);
+  if (!fs.existsSync(APK)) {
+    throw new Error('没有找到 APK：' + APK + '（debug 包先跑 gradlew assembleDebug，正式包先跑 assembleRelease）');
+  }
+  let out = A(['install', '-r', APK]);
+  /* debug 包与正式包的签名密钥不同，直接 -r 覆盖会报 INSTALL_FAILED_UPDATE_INCOMPATIBLE。
+     这时先卸掉旧包再装 —— 应用本身不存任何用户数据，卸载无副作用。 */
+  if (out.indexOf('Success') < 0 && /UPDATE_INCOMPATIBLE|signatures do not match/i.test(out)) {
+    console.log('  · 设备上是另一个签名的同包名版本，先卸载再装');
+    A(['uninstall', PKG]);
+    out = A(['install', '-r', APK]);
+  }
+  if (out.indexOf('Success') < 0) throw new Error('安装失败：' + out.trim());
+
   A(['shell', 'am', 'force-stop', PKG]);
   A(['logcat', '-c']);
   A(['shell', 'am', 'start', '-n', PKG + '/.MainActivity']);
@@ -83,13 +99,36 @@ function ensureInstalled() {
 
 /* ---------- 2. 连上 WebView 的 devtools ---------- */
 
+/** 应用主进程的 pid：WebView 的 devtools socket 名字就是 webview_devtools_remote_<主进程pid> */
+function appPid() {
+  let out = A(['shell', 'pidof', PKG]).trim();
+  if (!/^\d/.test(out)) {
+    out = A(['shell', 'ps', '-A', '-o', 'PID,NAME'])
+      .split('\n')
+      .filter(function (l) { return l.trim().split(/\s+/).pop() === PKG; })
+      .map(function (l) { return l.trim().split(/\s+/)[0]; })
+      .join(' ');
+  }
+  return (out.split(/\s+/)[0] || '').trim();
+}
+
+/** 只认「属于本应用主进程」的那一个 socket。
+    /proc/net/unix 是全设备可见的，别的应用也会挂同名 socket ——
+    不按 pid 过滤的话，正式包这一轮可能连到别人的调试端口上，test 会给出假绿。 */
 function findSocket() {
-  /* WebView 的 devtools socket 名字里带 pid，每启动一次都会变 */
-  const out = A(['shell', 'cat', '/proc/net/unix']);
-  const names = out.split('\n')
+  const pid = appPid();
+  if (!pid) return null;
+  const names = A(['shell', 'cat', '/proc/net/unix']).split('\n')
     .map(function (l) { return (l.match(/webview_devtools_remote(_\d+)?/) || [])[0]; })
     .filter(Boolean);
-  return names[names.length - 1] || null;
+  return names.indexOf('webview_devtools_remote_' + pid) >= 0
+    ? 'webview_devtools_remote_' + pid
+    : null;
+}
+
+/** 装上去的这个包本身是不是 debuggable 构建（dumpsys 的 flags 里带 DEBUGGABLE） */
+function isDebuggableInstalled() {
+  return A(['shell', 'dumpsys', 'package', PKG]).indexOf('DEBUGGABLE') >= 0;
 }
 
 function httpGetJson(urlPath) {
@@ -154,6 +193,76 @@ async function evalIn(cdp, expr) {
   return r.result.value;
 }
 
+/* ---------- 3. 不依赖 CDP 的两条公共断言 ---------- */
+
+function commonTailChecks() {
+  const badging = A(['shell', 'dumpsys', 'package', PKG]);
+  const perms = (badging.match(/requested permissions:/) ? badging.split('requested permissions:')[1].split('\n').slice(0, 12).join('\n') : '');
+  t('没有申请任何权限（纯离线应用）', () => {
+    assert(!/android\.permission\./.test(perms), '申请了权限：' + perms);
+  });
+
+  const crash = A(['logcat', '-d', '-b', 'crash']);
+  t('运行期间没有崩溃日志', () => {
+    assert(crash.indexOf(PKG) < 0, '崩溃日志里出现了本应用：\n' + crash.slice(-800));
+  });
+}
+
+/* ---------- 4. 正式包（不可调试）的降级检查 ----------
+   正式包在正式镜像上不开 WebView 远程调试（MainActivity 里判了 FLAG_DEBUGGABLE），
+   拿不到 CDP，所以这里改用 adb 能拿到的东西：
+     · 窗口真的建起来了、Activity 处于 resumed
+     · 页面真的渲染了东西（用 screencap 的原始像素格式直接统计墨色占比，不需要解码 PNG）
+     · 资源没有加载失败（logcat 里的 net::ERR_* 是 assets 缺失的信号）
+   然后接上面那两条公共断言。 */
+
+function screencapStats() {
+  /* `screencap` 不带 -p 时输出的是 12 字节头 + RGBA 原始像素，Node 直接读，不用任何解码库 */
+  const res = spawnSync(ADB, ['-s', serial, 'exec-out', 'screencap'],
+    { maxBuffer: 64 * 1024 * 1024, timeout: 60000 });
+  if (res.error || !res.stdout || res.stdout.length < 16) return null;
+  const buf = res.stdout;
+  const w = buf.readUInt32LE(0), h = buf.readUInt32LE(4);
+  if (!w || !h || buf.length < 12 + w * h * 4) return null;
+  let dark = 0, total = 0;
+  for (let y = 0; y < h; y += 4) {
+    for (let x = 0; x < w; x += 4) {
+      const o = 12 + (y * w + x) * 4;
+      total++;
+      if (buf[o] < 170 && buf[o + 1] < 170 && buf[o + 2] < 170) dark++;
+    }
+  }
+  return { w: w, h: h, ink: dark / total };
+}
+
+function releaseSmokeChecks() {
+  console.log('  · 这是不可调试的正式包，拿不到 devtools socket —— 只跑 adb 层的检查');
+
+  const top = A(['shell', 'dumpsys', 'activity', 'activities']);
+  t('正式包能启动且处于前台', () => {
+    assert(top.indexOf(PKG) >= 0, 'dumpsys activity 里找不到本应用');
+    assert(/ResumedActivity[\s\S]{0,200}?quadraticexactlab/.test(top)
+      || top.indexOf(PKG + '/.MainActivity') >= 0, 'Activity 没有进入 resumed 状态');
+  });
+
+  const logs = A(['shell', 'logcat', '-d', '-v', 'brief']);
+  t('页面资源全部加载成功（没有 ERR_FILE_NOT_FOUND）', () => {
+    const bad = ['ERR_FILE_NOT_FOUND', 'ERR_ACCESS_DENIED', 'ERR_INVALID_URL']
+      .filter(function (k) { return logs.indexOf(k) >= 0; });
+    assert(!bad.length, 'logcat 里有加载失败：' + bad.join(', '));
+  });
+
+  const shot = screencapStats();
+  t('页面真的渲染出了内容（不是白屏）', () => {
+    assert(shot, 'screencap 拿不到像素数据');
+    assert(shot.ink > 0.004, '屏幕上几乎没有墨色像素（ink=' + shot.ink.toFixed(4) + '），疑似白屏');
+    assert(shot.ink < 0.6, '屏幕几乎全黑（ink=' + shot.ink.toFixed(4) + '），疑似渲染失败');
+  });
+  if (shot) console.log('   · 正式包截图 ' + shot.w + '×' + shot.h + '，墨色像素占比 ' + shot.ink.toFixed(4));
+
+  commonTailChecks();
+}
+
 /* ================= 主流程 ================= */
 
 console.log('▶ Android 端到端自测  (设备 ' + serial + ')');
@@ -164,13 +273,37 @@ let cdp = null;
   try {
     ensureInstalled();
 
+    /* 装上去的包是不是不可调试的正式包 —— 这是正式版最该守住的一条。
+       顺带把「设备镜像本身可不可调试」也读出来，后面判断调试端口合不合法要看它。 */
+    const debuggable = isDebuggableInstalled();
+    const deviceDebuggable = A(['shell', 'getprop', 'ro.debuggable']).trim() === '1';
+    const wantedRelease = /[\\/]release[\\/]|-release\.apk$/.test(APK);
+    t(wantedRelease ? '正式包装起来是不可调试的' : 'debug 包装起来是可调试的', () => {
+      assert(debuggable === !wantedRelease,
+        'APK 是 ' + (wantedRelease ? 'release' : 'debug') + ' 变体，但装出来的包 debuggable=' + debuggable);
+    });
+
     /* 等 WebView 起来并注册 devtools socket */
     let sock = null;
-    for (let i = 0; i < 40 && !sock; i++) {
+    for (let i = 0; i < 30 && !sock; i++) {
       await new Promise(function (r) { setTimeout(r, 500); });
       sock = findSocket();
     }
-    if (!sock) throw new Error('等不到 WebView 的 devtools socket，应用可能没起来');
+
+    if (sock && !debuggable && !deviceDebuggable) {
+      /* 正式包 + 正式镜像：本来就不该有这个端口，说明有人误改了 MainActivity */
+      throw new Error('正式包在正式镜像上挂出了 WebView 调试端口：' + sock);
+    }
+    if (sock && !debuggable && deviceDebuggable) {
+      /* 正式包 + userdebug 镜像（模拟器）：平台自己会把调试打开，应用压不住。
+         这不是缺陷，但要说清楚，别把它当成「正式包很安全」的证据。 */
+      console.log('  · 设备镜像是 userdebug（ro.debuggable=1），平台会强制打开 WebView 调试，'
+        + '这条 socket 不是应用开的；正式（user）镜像上没有。');
+    }
+    if (!sock) {
+      if (debuggable) throw new Error('debug 包应该开 WebView 远程调试，却等不到 devtools socket');
+      return releaseSmokeChecks();
+    }
 
     A(['forward', 'tcp:' + PORT, 'localabstract:' + sock]);
 
@@ -389,16 +522,7 @@ let cdp = null;
     A(['shell', 'rm', '-f', '/sdcard/Download/' + mdName, '/sdcard/Download/' + pngName]);
 
     /* ---- 断言 5：没有权限申请、没有崩溃 ---- */
-    const badging = A(['shell', 'dumpsys', 'package', PKG]);
-    const perms = (badging.match(/requested permissions:/) ? badging.split('requested permissions:')[1].split('\n').slice(0, 12).join('\n') : '');
-    t('没有申请任何权限（纯离线应用）', () => {
-      assert(!/android\.permission\./.test(perms), '申请了权限：' + perms);
-    });
-
-    const crash = A(['logcat', '-d', '-b', 'crash']);
-    t('运行期间没有崩溃日志', () => {
-      assert(crash.indexOf(PKG) < 0, '崩溃日志里出现了本应用：\n' + crash.slice(-800));
-    });
+    commonTailChecks();
 
   } catch (err) {
     fail++;

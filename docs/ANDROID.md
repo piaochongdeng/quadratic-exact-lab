@@ -29,7 +29,8 @@
 | 版本 | `versionName 1.4.0` / `versionCode 10400` |
 | 依赖 | **无**（不用 AndroidX / AppCompat，纯系统框架） |
 | 权限 | **无** |
-| APK 体积 | 约 0.7 MB |
+| APK 体积 | 正式包 669 KB / 调试包 715 KB |
+| 签名 | APK Signature Scheme v2，RSA 4096，自签名（见第六节） |
 
 ![Android 版 · 二次函数工作区](img/android-quad.png)
 ![Android 版 · 三角函数工作区](img/android-trig.png)
@@ -62,10 +63,16 @@ py scripts/make-android-icons.py
 
 # 3) 构建 APK
 cd android
-./gradlew assembleDebug
+./gradlew assembleDebug      # 调试包：开 WebView 远程调试，端到端测试要用它
+./gradlew assembleRelease    # 正式包：需要签名配置（见第六节），没有配置就出未签名包
 ```
 
-产物：`android/app/build/outputs/apk/debug/quadratic-exact-lab-1.4.0-debug.apk`
+产物：
+
+| 变体 | 路径 |
+| --- | --- |
+| debug | `android/app/build/outputs/apk/debug/quadratic-exact-lab-1.4.0-debug.apk` |
+| release | `android/app/build/outputs/apk/release/quadratic-exact-lab-1.4.0-release.apk` |
 
 Windows 上直接跑 `gradlew.bat`；`android/local.properties` 里写好 `sdk.dir=...`，
 或者设好 `ANDROID_HOME` 环境变量。
@@ -132,9 +139,24 @@ var Android = window.QuadAndroid || null;   // 网页版 / 桌面版为 null
 - **`release` 关掉 R8**：`@JavascriptInterface` 标注的方法会被 R8 当成「无人调用」删掉，
   删掉后 `window.QuadAndroid.saveFile(...)` 会**静默失效**（不报错、不落盘，极难查）。
   `app/proguard-rules.pro` 里已经写好 keep 规则，以后想开 R8 直接改 `minifyEnabled true` 即可。
-- **WebView 远程调试只对 debug 包开**：
-  `if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) setWebContentsDebuggingEnabled(true)`。
-  release 包不会把调试端口暴露出去。
+- **WebView 远程调试只对 debug 包主动开**：
+
+  ```java
+  if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+      WebView.setWebContentsDebuggingEnabled(true);
+  }
+  ```
+
+  但这里有个**实测出来的反直觉结论**：在 `ro.debuggable=1` 的 **userdebug / eng 镜像**上
+  （模拟器就是），平台自己会把 WebView 调试打开，**应用压不住**——
+  即使显式调用 `WebView.setWebContentsDebuggingEnabled(false)`，
+  主进程照样会挂出 `@webview_devtools_remote_<pid>` 这个 abstract socket。
+  实测过程：把正式包装到 userdebug 模拟器上，`dumpsys package` 的 flags 里**没有** `DEBUGGABLE`
+  （确认它确实不是调试包），但 socket 依然在；再把调试包改成无条件传 `false` 重新编译，socket **还在**。
+
+  结论：**「不暴露调试端口」是正式（user）镜像的属性，不是这几行代码保证的**。
+  `tests/android.test.js` 因此按镜像类型分别判断（见 5.1），不会把模拟器上的 socket 误判成应用的问题，
+  也不会拿它当「正式包很安全」的证据。
 
 ---
 
@@ -225,6 +247,7 @@ var Android = window.QuadAndroid || null;   // 网页版 / 桌面版为 null
 
 它验证的是「套壳之后**才**可能出现的问题」：
 
+- 装上去的包与要验的变体一致（`release` 必须是**不可调试**的，`dumpsys package` 的 flags 里没有 `DEBUGGABLE`）
 - assets 是否真的加载到了（`file:///android_asset/index.html`、离线 KaTeX 字体有没有生效）
 - 原生桥 `window.QuadAndroid` 是否挂上、`isAndroid()` / `platform()` / `versionName()` 是否正确
 - 真实手机 viewport 下：吸顶重叠 = 0、触控目标 ≥ 44 px、输入框 ≥ 16 px、横向溢出 = 0
@@ -234,8 +257,14 @@ var Android = window.QuadAndroid || null;   // 网页版 / 桌面版为 null
 - `dumpsys package` 确认**没有申请任何权限**
 - `logcat -b crash` 确认**没有崩溃**
 
-实测环境：Android 15（API 35）x86_64 模拟器，1080×2340 @ 440dpi（视口 393×851 css px，dpr 2.75），
-**15 项断言全通过**，页头 103 px、切换条 59 px、吸顶重叠 0。
+调试端口那一条按镜像类型分开判断：正式镜像上出现端口直接判失败；
+userdebug 镜像上出现端口只**提示**（平台行为），并在没有端口时降级成「adb 层检查」——
+窗口起没起来、页面有没有真的渲染（`screencap` 的原始像素格式直接统计墨色占比，不依赖任何解码库）、
+`logcat` 里有没有 `ERR_FILE_NOT_FOUND`。
+
+实测环境：Android 15（API 35）x86_64 模拟器，1080×2340 @ 440dpi（视口 393×851 css px，dpr 2.75）。
+**调试包与签名过的正式包各 16 项断言，全部通过**；
+页头 103 px、切换条 59 px、吸顶重叠 0，正式包导出的 Markdown 与页面内容逐字符一致。
 
 ### 5.2 怎么自己跑
 
@@ -247,23 +276,44 @@ $ANDROID_HOME/emulator/emulator -avd <你的 AVD> &
 node scripts/make-www.js
 cd android && ./gradlew assembleDebug && cd ..
 node tests/android.test.js
+
+# 想验签名过的正式包（没有调试端口时会自动降级成 adb 层检查）
+ANDROID_APK=$PWD/android/app/build/outputs/apk/release/quadratic-exact-lab-1.4.0-release.apk \
+  node tests/android.test.js
 ```
+
+测试脚本会自动处理「设备上装的是另一个签名的同包名版本」——
+先卸载再装（应用本身不存任何用户数据，卸载无副作用）。
 
 ---
 
-## 六、已知边界
+## 六、签名
 
-- **没有签名配置**。仓库里没有 `android/keystore.properties`，`assembleRelease` 出来的包**不签名**，
-  只能自己本地检查。想发正式包：在 `android/` 下建 `keystore.properties`（已在 `.gitignore` 里）：
+发布用的正式包是**自签名**的（APK Signature Scheme v2，RSA 4096，有效期 30 年）。
+`app/build.gradle` 检测到 `android/keystore.properties` 就自动接上 release 签名：
 
-  ```properties
-  storeFile=../quadratic-exact-lab.jks
-  storePassword=…
-  keyAlias=…
-  keyPassword=…
-  ```
+```properties
+# android/keystore.properties —— 本机文件，已在 .gitignore 里
+storeFile=../quadratic-exact-lab.jks
+storePassword=…
+keyAlias=quadlab
+keyPassword=…
+```
 
-  `app/build.gradle` 检测到这个文件就会自动接上 release 签名。
+密钥库 `quadratic-exact-lab.jks` 放在仓库根目录，同样被 `.gitignore` 挡住（`*.jks`）。
+没有这个文件时 `assembleRelease` 会产出**未签名**的 APK（`apksigner verify` 报 `DOES NOT VERIFY`），
+只能本地检查，装不上设备。
+
+`minSdk 24` 下 v2 签名是够用的，所以产物里没有 v1（JAR）签名 —— `apksigner verify` 会显示
+`Verified using v2 scheme: true` / `v1 scheme: false`，这是正常的，不是缺陷。
+
+> ⚠️ **这个密钥同时是应用的「更新身份」**：以后每个包都必须用同一个密钥签名，
+> 否则已安装的用户升不上去，只能卸载重装。请把 `.jks` 和 `keystore.properties` 一起备份。
+> 换了密钥（或换了开发者）就相当于换了一个应用。
+
+---
+
+## 七、已知边界
 
 - **三角函数的两张画布不支持捏合缩放**。它们本身是按真实比例自动缩放到刚好放下的，
   缩放后反而会出现「画布外」的空白；二次函数画布需要缩放是因为它画的是连续曲线。

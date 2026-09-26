@@ -101,7 +101,8 @@ python -m http.server 8080
 ```bash
 node scripts/make-www.js          # 把运行时文件挑进 www/（构建产物，不进仓库）
 py scripts/make-android-icons.py  # 从 desktop/icon.png 生成 mipmap（需要 Pillow）
-cd android && ./gradlew assembleDebug
+cd android && ./gradlew assembleDebug     # 调试包
+cd android && ./gradlew assembleRelease   # 正式包（需要 android/keystore.properties，见 docs/ANDROID.md）
 ```
 
 细节、取舍与踩坑见 [`docs/ANDROID.md`](docs/ANDROID.md)。
@@ -222,10 +223,11 @@ node tests/dom-check.js        # 页面与脚本的 id 引用一致性
 node tests/desktop.test.js     # 桌面版端到端 31 项（需先 npm install；未装 Electron 会自动跳过）
                                #   含手机尺寸布局回归：390×844 / 320×640 下的吸顶重叠、触控目标、
                                #   输入框字号、横向溢出、双指捏合缩放
-node tests/android.test.js     # Android 端到端 15 项（需要一台已连接设备；没有设备会自动跳过）
-                               #   在真实 WebView 里验证：assets 加载、离线 KaTeX 字体、原生桥、
-                               #   真机 viewport 布局、三张画布、导出真的落盘并逐字符比对、
-                               #   零权限申请、无崩溃日志
+node tests/android.test.js     # Android 端到端 16 项（需要一台已连接设备；没有设备会自动跳过）
+                               #   在真实 WebView 里验证：包的变体与可调试性、assets 加载、
+                               #   离线 KaTeX 字体、原生桥、真机 viewport 布局、三张画布、
+                               #   导出真的落盘并逐字符比对、零权限申请、无崩溃日志
+                               #   默认验 debug 包；设 ANDROID_APK=<正式包路径> 验正式包
 ```
 
 也可以一次跑完：

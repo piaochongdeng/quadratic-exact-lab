@@ -61,10 +61,17 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        /* 只给 debuggable 构建开 WebView 远程调试：
+        /* WebView 远程调试：只给 debuggable 构建开。
            adb forward tcp:9222 localabstract:webview_devtools_remote_<pid>
            之后就能用 Chrome DevTools / CDP 检查真实 WebView 里的页面。
-           release 包不会开，避免把调试端口暴露出去。 */
+
+           注意这里**管不住 userdebug / eng 镜像**（模拟器就是）：
+           实测在 ro.debuggable=1 的镜像上，即使显式调用
+           WebView.setWebContentsDebuggingEnabled(false)，主进程照样会挂出
+           @webview_devtools_remote_<pid> —— 平台自己会把调试打开，应用压不住。
+           正式（user）镜像上 ro.debuggable=0，没有这个口子。
+           所以「不暴露调试端口」是正式镜像的属性，不是这行代码保证的；
+           这行代码的作用只是：debug 构建一定要有，正式构建不要主动多开。 */
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
