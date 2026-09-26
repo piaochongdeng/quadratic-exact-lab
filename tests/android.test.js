@@ -131,6 +131,21 @@ function isDebuggableInstalled() {
   return A(['shell', 'dumpsys', 'package', PKG]).indexOf('DEBUGGABLE') >= 0;
 }
 
+/** 要验的这个 APK 是不是正式包 —— 由 APK 自己说了算，不看文件名。
+    （文件可能被改名成 dl.apk 之类，靠名字猜变体会误判。） */
+function apkIsRelease() {
+  const bt = path.join(SDK, 'build-tools');
+  if (!fs.existsSync(bt)) return null;
+  const exe = process.platform === 'win32' ? 'aapt2.exe' : 'aapt2';
+  const aapt2 = fs.readdirSync(bt).sort().reverse()
+    .map(function (v) { return path.join(bt, v, exe); })
+    .filter(function (p) { return fs.existsSync(p); })[0];
+  if (!aapt2) return null;
+  const res = spawnSync(aapt2, ['dump', 'badging', APK], { encoding: 'utf8', timeout: 60000 });
+  if (res.error || !res.stdout) return null;
+  return res.stdout.indexOf('application-debuggable') < 0;   /* badging 里有这行才是调试包 */
+}
+
 function httpGetJson(urlPath) {
   return new Promise(function (resolve, reject) {
     const req = require('http').get({ host: '127.0.0.1', port: PORT, path: urlPath }, function (res) {
@@ -277,11 +292,15 @@ let cdp = null;
        顺带把「设备镜像本身可不可调试」也读出来，后面判断调试端口合不合法要看它。 */
     const debuggable = isDebuggableInstalled();
     const deviceDebuggable = A(['shell', 'getprop', 'ro.debuggable']).trim() === '1';
-    const wantedRelease = /[\\/]release[\\/]|-release\.apk$/.test(APK);
-    t(wantedRelease ? '正式包装起来是不可调试的' : 'debug 包装起来是可调试的', () => {
-      assert(debuggable === !wantedRelease,
-        'APK 是 ' + (wantedRelease ? 'release' : 'debug') + ' 变体，但装出来的包 debuggable=' + debuggable);
-    });
+    const wantedRelease = apkIsRelease();
+    if (wantedRelease === null) {
+      console.log('  · 找不到 aapt2（' + path.join(SDK, 'build-tools') + '），跳过「变体一致」这条断言');
+    } else {
+      t(wantedRelease ? '正式包装起来是不可调试的' : 'debug 包装起来是可调试的', () => {
+        assert(debuggable === !wantedRelease,
+          'APK 是 ' + (wantedRelease ? 'release' : 'debug') + ' 变体，但装出来的包 debuggable=' + debuggable);
+      });
+    }
 
     /* 等 WebView 起来并注册 devtools socket */
     let sock = null;

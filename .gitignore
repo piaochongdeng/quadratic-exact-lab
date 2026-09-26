@@ -39,3 +39,6 @@ docs/ANDROID-HANDOFF.md
 
 # 本机备忘（含签名口令），永远不要提交
 *.local.txt
+
+# 发布用的产物副本（上传 Release 前临时放这里）
+dist-release/
