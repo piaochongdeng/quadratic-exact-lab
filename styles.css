@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * quadratic-exact-lab · styles.css
  * 版式目标：任何窗口宽度下都不错版、不重叠、不抖动。
  * 关键手法：网格列使用 minmax(0,1fr) 防溢出；公式与表格各自横向滚动，
@@ -80,6 +80,19 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* ============ 顶部吸顶容器 ============
+   页头 + 工作区切换条共用同一个 sticky 容器。
+   注意：绝对不要让 .app-header / .mode-bar 各自 sticky —— 页头 z-index 更高时
+   会把切换条整条盖住，滚动后无法切换工作区（v1.3.0 回归）。 */
+.top-dock {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  /* 吸顶后下方内容从它底下穿过，这里补一层不透明底，避免半透明叠加发花 */
+  background: var(--card);
+  box-shadow: 0 1px 0 var(--line);
+}
+
 /* ============ 页头 ============ */
 .app-header {
   display: flex;
@@ -90,9 +103,6 @@ body {
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--card) 82%, transparent);
   backdrop-filter: saturate(1.1) blur(8px);
-  position: sticky;
-  top: 0;
-  z-index: 20;
 }
 
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -122,9 +132,6 @@ body {
   padding: 10px 26px;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--card) 70%, transparent);
-  position: sticky;
-  top: 0;
-  z-index: 19;
 }
 
 .mode-bar button {
@@ -149,6 +156,9 @@ body {
   color: #fff;
   box-shadow: var(--shadow-sm);
 }
+
+/* 窄屏用短标签，两个按钮才能同时看得见（长标签在 390 px 上要横向滚动） */
+.mode-bar .mode-short { display: none; }
 
 /* ============ 三角函数工作区 ============ */
 .trig-field { margin-top: 14px; }
@@ -718,6 +728,10 @@ input[type="text"].mono { font-family: var(--mono); letter-spacing: 0.2px; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--card);
+  /* Chrome 会把嵌套滚动容器里「溢出但被裁掉」的内容也算进根元素的 scrollWidth，
+     窄屏（容器比 .md-table 的 380px 最小宽度还窄）时页面会凭空多出一条横向滚动。
+     paint containment 让这部分溢出真正被隔离在容器内部。 */
+  contain: paint;
 }
 
 .md-table {
@@ -832,11 +846,128 @@ input[type="text"].mono { font-family: var(--mono); letter-spacing: 0.2px; }
 
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
 
+/* ============ 移动端适配 ============
+   目标：手机竖屏（约 390 × 844）下可用。
+   · 触控目标 ≥ 44 px（Apple HIG / Material 的最小值）
+   · 输入框字号 ≥ 16 px（否则 iOS / 部分 Android 浏览器聚焦时会自动放大页面）
+   · 刘海 / 挖孔屏安全区（需 viewport-fit=cover）
+   · 窄屏页头瘦身：原来的 209 px 页头太占地方，压缩成两行并让按钮横向滚动
+*/
+@media (max-width: 720px) {
+  /* ---- 安全区：左右留出圆角/挖孔的宽度 ---- */
+  .top-dock {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  body {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .app-footer { padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+
+  /* ---- 页头瘦身：品牌一行 + 操作按钮一行（可横向滚动） ---- */
+  .app-header {
+    padding: 10px 14px 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .brand { gap: 9px; }
+  .brand-mark { width: 30px; height: 30px; flex-basis: 30px; font-size: 15px; border-radius: 9px; }
+  /* 副标题在手机上纯属占地方，隐藏后页头立刻矮一半（标题字号保持桌面版的 17px） */
+  .brand-text p { display: none; }
+
+  .header-actions {
+    flex: 1 0 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 6px;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .header-actions::-webkit-scrollbar { height: 0; }
+  .header-actions > * { flex: 0 0 auto; }
+
+  /* ---- 切换条：按钮撑到 44 px，横向滚动不换行 ---- */
+  .mode-bar {
+    padding: 6px 14px 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .mode-bar::-webkit-scrollbar { height: 0; }
+  .mode-bar button { flex: 0 0 auto; min-height: 44px; padding: 0 16px; }
+
+  /* ---- 触控目标统一抬到 44 px ---- */
+  .btn { height: 44px; padding: 0 14px; font-size: 13.5px; }
+  .btn-sm { height: 44px; padding: 0 12px; font-size: 13px; }
+  .btn-icon { width: 44px; }
+  .segmented button { height: 44px; font-size: 13px; }
+  .view-tabs button { height: 44px; padding: 0 12px; }
+  .radio-pill { height: 44px; }
+  .bracket-btn { width: 44px; height: 44px; }
+  .inf-toggle { height: 44px; font-size: 12.5px; }
+  .plot-toolbar .btn-sm { height: 44px; }
+  .plot-toolbar .btn-icon { width: 44px; }
+  .digits-row input[type="number"] { height: 44px; }
+
+  /* ---- 输入控件：字号 ≥16 px 防自动放大，高度 ≥44 px ---- */
+  input[type="text"], select, .digits-row input[type="number"] {
+    height: 44px;
+    font-size: 16px;
+  }
+  .domain-row { grid-template-columns: 44px minmax(0, 1fr) 54px; gap: 6px; }
+
+  /* ---- 布局：单列 + 收窄内边距 ---- */
+  .app-grid { padding: 14px 12px 40px; gap: 16px; }
+  .col-left, .col-right { gap: 16px; }
+  .panel-body { padding: 14px 14px 16px; }
+  .plot-wrap { height: 300px; }
+  .chips { padding: 10px 12px; gap: 8px; }
+  .chip { min-height: 56px; }
+  .app-footer { padding: 18px 14px 28px; }
+  .toast { left: 50%; max-width: calc(100vw - 32px); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* 超窄屏（小屏手机竖屏，如 320~360 px） */
+@media (max-width: 480px) {
+  .brand-text h1 { font-size: 16px; }
+  .mode-bar button { font-size: 13px; padding: 0 13px; }
+  .plot-wrap { height: 260px; }
+
+  /* 切换条改用短标签，两个按钮一屏放下，不用横向滚动 */
+  .mode-bar .mode-long { display: none; }
+  .mode-bar .mode-short { display: inline; }
+
+  /* 面板标题栏：标题 + 视图切换按钮在 320 px 下会挤出横向溢出（历史遗留），
+     这里让切换按钮整行落下，标题独占一行。 */
+  .panel-head { flex-wrap: wrap; row-gap: 6px; }
+  .panel-head .view-tabs { flex: 1 0 100%; margin-left: 0 !important; }
+  .panel-head .view-tabs button { flex: 1 1 0; min-width: 0; }
+}
+
+/* ============ 输入方式提示：鼠标 / 键盘 vs 触屏 ============ */
+
+/* 触屏设备（手机、平板、Android 壳）看不到键盘，把快捷键说明收起来，
+   换成双指操作说明。用 pointer: coarse 判断，比按宽度判断更准 ——
+   窄窗口的桌面浏览器仍然是鼠标，仍然需要那份快捷键说明。 */
+.touch-hint { display: none; }
+@media (pointer: coarse) {
+  .kbd-hint { display: none; }
+  .touch-hint { display: inline; }
+}
+
 /* ============ 打印 ============ */
 @media print {
   :root { --bg: #fff; --card: #fff; --shadow: none; --shadow-sm: none; }
   body { background: #fff; font-size: 12pt; }
   .app-header, .col-left, .app-footer, .view-tabs, .plot-toolbar, .toast, .chips { display: none !important; }
+  .top-dock { position: static !important; box-shadow: none !important; background: none !important; }
+  .mode-bar { display: none !important; }
   .app-grid { display: block; padding: 0; max-width: none; }
   .panel { border: 0; box-shadow: none; }
   .panel-head { display: none; }

@@ -210,8 +210,76 @@ t('三角函数：报告结构完整、无排版错误、可导出', () => {
   assert((r4.consoleErrors || []).length === 0, '控制台报错：' + JSON.stringify(r4.consoleErrors));
 });
 
+/* ---------------- 移动端 / 吸顶回归 ---------------- */
+
+const r5 = runElectron('smoke-mobile.js', path.join('desktop', 'smoke-mobile-result.json'));
+const PHONES = ['phone-portrait', 'phone-small'];
+
+t('吸顶回归：滚动后切换条不被页头盖住（多尺寸）', () => {
+  Object.keys(r5.sizes).forEach((k) => {
+    const s = r5.sizes[k];
+    assert(s.scrollY > 0, k + '：没有真的滚动，测试无效');
+    assert(s.overlap === 0, k + '：页头与切换条重叠 ' + s.overlap + 'px');
+    assert(s.barRect && s.barRect.height > 0, k + '：切换条高度为 0');
+    assert(s.barWithinViewport === true, k + '：切换条不在视口内（top=' + (s.barRect && s.barRect.top) + '）');
+    assert(s.barHitInsideBar === true, k + '：切换条中心点被 ' + s.barHitTag + ' 挡住，点不到');
+    assert(s.trigBtnReachable === true, k + '：滚动后「三角函数」按钮点不到');
+    assert(s.modeAfterClick === 'trig', k + '：滚动后点击切换条没有切换工作区');
+  });
+});
+
+t('手机竖屏：触控目标 ≥ 44px、输入框 ≥ 16px', () => {
+  PHONES.forEach((k) => {
+    const s = r5.sizes[k];
+    assert(s.smallestTargetH >= 44, k + '：最小的触控目标只有 ' + s.smallestTargetH + 'px');
+    assert(s.smallTargets.length === 0, k + '：以下控件不足 44px → ' + s.smallTargets.join(', '));
+    assert(s.inputFontSize >= 16, k + '：输入框字号 ' + s.inputFontSize + 'px，聚焦会被自动放大');
+    assert(s.selectFontSize >= 16, k + '：下拉框字号 ' + s.selectFontSize + 'px');
+    assert(s.inputHeight >= 44, k + '：输入框高度只有 ' + s.inputHeight + 'px');
+  });
+});
+
+t('手机竖屏：页头瘦身且切换条不用横向滚动', () => {
+  PHONES.forEach((k) => {
+    const s = r5.sizes[k];
+    /* 修复前手机页头 209px（副标题 + 5 个按钮换行），现在压到两行 */
+    assert(s.headerHeight <= 130, k + '：页头仍然过高 ' + s.headerHeight + 'px');
+    assert(s.modeBarLabel === 'short', k + '：窄屏没有改用短标签');
+    assert(s.modeBarScroll === 0, k + '：切换条还要横向滚动 ' + s.modeBarScroll + 'px');
+  });
+});
+
+t('多宽度无横向溢出（含 320px 超窄屏）', () => {
+  Object.keys(r5.sizes).forEach((k) => {
+    const s = r5.sizes[k];
+    assert(s.overflow === 0, k + '（' + s.innerWidth + 'px）：页面横向溢出 ' + s.overflow + 'px');
+    assert(s.trigOverflow === 0, k + '（' + s.innerWidth + 'px）：三角函数工作区横向溢出 ' + s.trigOverflow + 'px');
+  });
+});
+
+t('两个工作区在手机尺寸下都能正常渲染', () => {
+  PHONES.forEach((k) => {
+    const s = r5.sizes[k];
+    assert(s.quadCanvasNonBlank === true, k + '：二次函数画布空白');
+    assert(s.triNonBlank === true && s.unitNonBlank === true, k + '：三角函数画布空白');
+    assert(s.triCanvas.w > 200 && s.triCanvas.h > 150, k + '：三角形画布尺寸异常 ' + JSON.stringify(s.triCanvas));
+    assert(s.unitCanvas.w > 200 && s.unitCanvas.h > 150, k + '：单位圆画布尺寸异常 ' + JSON.stringify(s.unitCanvas));
+  });
+});
+
+t('二次函数画布支持双指捏合缩放', () => {
+  PHONES.forEach((k) => {
+    const s = r5.sizes[k];
+    assert(s.pinchZoomedIn === true, k + '：两指张开没有放大（' + s.pinchOutSpanBefore + ' → ' + s.pinchOutSpanAfter + '）');
+    assert(s.pinchZoomedOut === true, k + '：两指靠拢没有缩小（' + s.pinchSpanBefore + ' → ' + s.pinchSpanAfter + '）');
+    assert(s.singleTouchKeepsView === true, k + '：单指触摸被误当成捏合，视野被改掉了');
+  });
+  assert((r5.consoleErrors || []).length === 0, '控制台报错：' + JSON.stringify(r5.consoleErrors));
+});
+
 /* 清理测试产物目录 */
 try { fs.rmSync(path.join(ROOT, 'desktop', 'smoke-out'), { recursive: true, force: true }); } catch (e) {}
+try { fs.rmSync(path.join(ROOT, 'desktop', 'smoke-mobile-result.json'), { force: true }); } catch (e) {}
 
 console.log('  通过 ' + pass + ' 项，失败 ' + fail + ' 项');
 if (fail) process.exit(1);

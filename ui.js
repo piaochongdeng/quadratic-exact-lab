@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * quadratic-exact-lab · ui.js  (v1.0.0)
  * ------------------------------------------------------------------
  * 界面逻辑：输入 → 精确计算 → Markdown 报告 + 图像可视化。
@@ -83,10 +83,22 @@
   var el = {};
   var debounceTimer = null;
   var Desktop = window.QuadDesktop || null;   /* 桌面版由 preload 注入；网页版为 null */
+  var Android = window.QuadAndroid || null;   /* Android 壳用 addJavascriptInterface 注入；网页版为 null */
 
   /* ================= 小工具 ================= */
 
   function $(id) { return document.getElementById(id); }
+
+  /** 字符串 → Base64（UTF-8 安全）。Android 的原生桥只收 Base64，二进制才不会被截断。 */
+  function utf8ToBase64(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = '';
+    var CHUNK = 0x8000;   /* 分块拼接，避免超长字符串把调用栈撑爆 */
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(bin);
+  }
 
   function katexInline(tex, target) {
     try {
@@ -102,6 +114,13 @@
   }
 
   function copyText(text) {
+    /* Android 壳里 navigator.clipboard 在 file:// 下不可靠，交给原生剪贴板 */
+    if (Android && typeof Android.copy === 'function') {
+      return new Promise(function (resolve) {
+        Android.copy(text);
+        resolve();
+      });
+    }
     if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
     return new Promise(function (resolve, reject) {
       var ta = document.createElement('textarea');
@@ -403,6 +422,7 @@
       });
 
       canvas.addEventListener('pointermove', function (ev) {
+        if (pinch) return;   /* 双指捏合期间不做悬停读数 / 平移 */
         var rect = canvas.getBoundingClientRect();
         var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
         if (self.drag) {
@@ -431,6 +451,50 @@
       });
 
       canvas.addEventListener('dblclick', function () { self.fit(); self.draw(); });
+
+      /* ---------- 双指捏合缩放 ----------
+         触屏上没有滚轮，只靠 wheel 事件的话手机上根本没法缩放。
+         这里用两支手指的距离变化做缩放，中点作为缩放锚点。
+         双指期间禁用平移与悬停读数，避免和 pointer 事件打架。 */
+      var pinch = null;
+
+      function pinchInfo(ev) {
+        var rect = canvas.getBoundingClientRect();
+        var a = ev.touches[0], b = ev.touches[1];
+        var dx = b.clientX - a.clientX, dy = b.clientY - a.clientY;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        return {
+          dist: dist,
+          fx: ((a.clientX + b.clientX) / 2 - rect.left) / rect.width,
+          fy: ((a.clientY + b.clientY) / 2 - rect.top) / rect.height
+        };
+      }
+
+      canvas.addEventListener('touchstart', function (ev) {
+        if (ev.touches.length !== 2) return;
+        ev.preventDefault();
+        self.drag = null;
+        self.hover = null;
+        el.tooltip.classList.remove('on');
+        pinch = pinchInfo(ev);
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', function (ev) {
+        if (ev.touches.length !== 2) return;
+        ev.preventDefault();
+        var now = pinchInfo(ev);
+        if (!pinch || !(pinch.dist > 0) || !(now.dist > 0)) { pinch = now; return; }
+        /* 两指张开 → 放大：k = 上一帧距离 / 当前距离（< 1 表示视野缩小 = 放大） */
+        var k = pinch.dist / now.dist;
+        if (Math.abs(k - 1) > 1e-4) self.zoomAt(now.fx, now.fy, k);
+        pinch = now;
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', function (ev) {
+        if (ev.touches.length < 2) pinch = null;
+      }, { passive: true });
+
+      canvas.addEventListener('touchcancel', function () { pinch = null; }, { passive: true });
     },
 
     resize: function () {
@@ -961,6 +1025,7 @@
 
     el.btnDownload.addEventListener('click', function () {
       if (!state.report || !state.report.ok) { toast('当前没有可下载的报告'); return; }
+      if (Android) { androidSave('二次函数解析报告.md', 'text/markdown', state.report.markdown); return; }
       var blob = new Blob([state.report.markdown], { type: 'text/markdown;charset=utf-8' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
@@ -973,7 +1038,7 @@
       toast('已导出 Markdown 文件');
     });
 
-    el.btnPrint.addEventListener('click', function () { window.print(); });
+    el.btnPrint.addEventListener('click', function () { androidPrint(); });
 
     el.btnShare.addEventListener('click', function () {
       copyText(location.href)
@@ -1152,6 +1217,11 @@
     zoomIn: function () { el.btnZoomIn.click(); },
     zoomOut: function () { el.btnZoomOut.click(); },
 
+    /** 当前图像视野（只读快照）。缩放 / 平移 / 捏合后可用它校验视野是否真的变了 */
+    getView: function () {
+      return { xMin: Plot.view.xMin, xMax: Plot.view.xMax, yMin: Plot.view.yMin, yMax: Plot.view.yMax };
+    },
+
     /** 报告当前是否可用 */
     isReady: function () { return !!(state.report && state.report.ok); },
 
@@ -1162,7 +1232,7 @@
     setMode: function (mode) { return AppMode.set(mode); },
     getMode: function () { return AppMode.current(); },
 
-    version: '1.3.0'
+    version: '1.4.0'
   };
 
   /* ================= 桌面版菜单事件 ================= */
@@ -1210,6 +1280,58 @@
     el.btnShare.parentNode.insertBefore(loadBtn, el.btnShare);
   }
 
+  /* ================= Android 原生桥 ================= */
+
+  /**
+   * 保存文件到 Android 的「下载」目录。
+   * @param {string} name       文件名
+   * @param {string} mime       MIME 类型
+   * @param {string} content    文本内容，或已经是 Base64 的二进制
+   * @param {boolean} isBase64  第三项是否已经是 Base64
+   */
+  function androidSave(name, mime, content, isBase64) {
+    if (!Android || typeof Android.saveFile !== 'function') { toast('当前环境不支持导出'); return; }
+    var b64 = isBase64 ? content : utf8ToBase64(content);
+    try {
+      Android.saveFile(name, mime, b64);
+      toast('正在保存 ' + name);
+    } catch (e) {
+      toast('导出失败');
+    }
+  }
+
+  /** 打印 / 导出 PDF：Android 走系统的打印框架（可选「另存为 PDF」） */
+  function androidPrint() {
+    if (Android && typeof Android.printPage === 'function') { Android.printPage(); return; }
+    window.print();
+  }
+
+  /**
+   * Android 壳里的按钮适配。
+   * 与桌面版一样，把浏览器语义的按钮换成原生语义：
+   * 「分享链接」在 APK 里没有意义（链接指向 file:///android_asset），改成导出图像。
+   */
+  function bindAndroid() {
+    if (!Android) return;
+    document.documentElement.classList.add('is-android');
+
+    el.btnDownload.title = '保存 Markdown 报告到「下载」目录';
+    el.btnPrint.title = '打印或另存为 PDF';
+    el.btnShare.textContent = '导出图像';
+    el.btnShare.title = '把当前函数图像保存为 PNG';
+
+    el.btnShare.addEventListener('click', function () { exportPng(); });
+
+    /* Android 也补上「载入数据」：原生侧实现了 onShowFileChooser，能弹系统文件选择器 */
+    var loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.className = 'btn btn-sm';
+    loadBtn.textContent = '载入数据';
+    loadBtn.title = '从 JSON 还原输入条件';
+    loadBtn.addEventListener('click', function () { loadJson(); });
+    el.btnShare.parentNode.insertBefore(loadBtn, el.btnShare);
+  }
+
   /* ================= 桌面版文件读写 ================= */
 
   /** 交给主进程弹原生保存对话框；没有内容时给出提示 */
@@ -1220,10 +1342,14 @@
     }).catch(function () { toast('保存失败'); });
   }
 
-  /** 导出图像 PNG：浏览器版走下载，桌面版走原生对话框 */
+  /** 导出图像 PNG：浏览器版走下载，桌面版走原生对话框，Android 走 MediaStore */
   function exportPng() {
     var url = window.QuadLab.getCanvasDataURL();
     if (!url) { toast('当前没有可导出的图像'); return; }
+    if (Android) {
+      androidSave('二次函数图像.png', 'image/png', url.replace(/^data:image\/png;base64,/, ''), true);
+      return;
+    }
     if (!Desktop) {
       var a = document.createElement('a');
       a.href = url; a.download = '二次函数图像.png';
@@ -1258,6 +1384,6 @@
     inp.click();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { boot(); bindDesktop(); });
-  else { boot(); bindDesktop(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { boot(); bindDesktop(); bindAndroid(); });
+  else { boot(); bindDesktop(); bindAndroid(); }
 })();

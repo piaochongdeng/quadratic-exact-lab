@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · trig-ui.js  (v1.3.0)
+ * quadratic-exact-lab · trig-ui.js  (v1.4.0)
  * ------------------------------------------------------------------
  * 三角函数工作区的界面逻辑：
  *   · 输入：sin / cos / tan + 角度 或 用户自填的函数值 + 已知的一条边 + 小数精度
@@ -16,6 +16,7 @@
 
   var FN_TEX = { sin: '\\sin', cos: '\\cos', tan: '\\tan' };
   var FN_NAME = { sin: '正弦 sin', cos: '余弦 cos', tan: '正切 tan' };
+  var Android = window.QuadAndroid || null;   /* Android 壳注入；网页版 / 桌面版为 null */
   var SIDE_NAME = { opposite: '对边 o（BC）', adjacent: '邻边 a（AC）', hypotenuse: '斜边 h（AB）' };
   var SIDE_LETTER = { opposite: 'o', adjacent: 'a', hypotenuse: 'h' };
   var SIDE_EDGE = { opposite: 'BC', adjacent: 'AC', hypotenuse: 'AB' };
@@ -64,6 +65,17 @@
     el.toast.classList.add('on');
     clearTimeout(el.toast._t);
     el.toast._t = setTimeout(function () { el.toast.classList.remove('on'); }, 1900);
+  }
+
+  /** 字符串 → Base64（UTF-8 安全）。Android 的原生桥只收 Base64。 */
+  function utf8ToBase64(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = '';
+    var CHUNK = 0x8000;
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(bin);
   }
 
   function fmt(v) {
@@ -691,6 +703,7 @@
       if (!state.report || !state.report.ok) { toast('当前没有可复制的报告'); return; }
       var md = state.report.markdown;
       var done = function () { toast('已复制三角函数报告'); };
+      if (Android && typeof Android.copy === 'function') { Android.copy(md); done(); return; }
       if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(md).then(done);
       else {
         var ta = document.createElement('textarea');
@@ -702,6 +715,13 @@
     });
     el.btnDownload.addEventListener('click', function () {
       if (!state.report || !state.report.ok) { toast('当前没有可导出的报告'); return; }
+      if (Android && typeof Android.saveFile === 'function') {
+        try {
+          Android.saveFile('三角函数解析报告.md', 'text/markdown', utf8ToBase64(state.report.markdown));
+          toast('正在保存 三角函数解析报告.md');
+        } catch (e) { toast('导出失败'); }
+        return;
+      }
       var blob = new Blob([state.report.markdown], { type: 'text/markdown;charset=utf-8' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -710,16 +730,38 @@
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 200);
     });
-    el.btnPrint.addEventListener('click', function () { window.print(); });
+    el.btnPrint.addEventListener('click', function () {
+      if (Android && typeof Android.printPage === 'function') { Android.printPage(); return; }
+      window.print();
+    });
     el.btnShare.addEventListener('click', function () {
+      /* Android 壳里「复制 file:// 链接」没有意义，改成导出两张画布合成的 PNG */
+      if (Android && typeof Android.saveFile === 'function') {
+        var url = window.TrigLab.getCanvasDataURL();
+        if (!url) { toast('当前没有可导出的图像'); return; }
+        try {
+          Android.saveFile('三角函数图像.png', 'image/png', url.replace(/^data:image\/png;base64,/, ''));
+          toast('正在保存 三角函数图像.png');
+        } catch (e) { toast('导出失败'); }
+        return;
+      }
       try { history.replaceState(null, '', '#' + 'trig:' + encodeURIComponent(JSON.stringify(collectInput()))); } catch (e) { /* 忽略 */ }
-      var url = location.href;
-      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(function () { toast('链接已复制，打开即可还原当前输入'); });
+      var href = location.href;
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(href).then(function () { toast('链接已复制，打开即可还原当前输入'); });
       else toast('请手动复制地址栏链接');
     });
     el.btnExamplePrev.addEventListener('click', function () { step(-1); });
     el.btnExampleNext.addEventListener('click', function () { step(1); });
     el.btnResetView.addEventListener('click', function () { TriPlot.resize(); UnitPlot.resize(); toast('已重绘图像'); });
+
+    /* Android 壳：把浏览器语义的按钮换成原生语义 */
+    if (Android) {
+      document.documentElement.classList.add('is-android');
+      el.btnDownload.title = '保存 Markdown 报告到「下载」目录';
+      el.btnPrint.title = '打印或另存为 PDF';
+      el.btnShare.textContent = '导出图像';
+      el.btnShare.title = '把三角形与单位圆保存为一张 PNG';
+    }
   }
 
   function step(delta) {
@@ -826,7 +868,7 @@
         return out.toDataURL('image/png');
       } catch (e) { return null; }
     },
-    version: '1.3.0'
+    version: '1.4.0'
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

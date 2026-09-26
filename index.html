@@ -1,14 +1,20 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f2ee">
 <title>二次函数精确解析器 · 顶点式 / 交点式 / 一般式互化、最值与三角函数</title>
 <meta name="description" content="输入顶点式、交点式或一般式，自动完成形式互化、顶点与对称轴、判别式与零点、定义域最值分析；并可用 sin / cos / tan 与一条边精确求解直角三角形。全部结果以 Markdown 精确呈现（分数 / 最简根式）。">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+<!-- 页头与工作区切换条包在同一个 sticky 容器里。
+     若两者各自 sticky，页头 z-index 更高会把切换条整条盖住，
+     滚动后既看不见也点不到（v1.3.0 的回归，手机屏上重叠 105px）。 -->
+<div class="top-dock" id="top-dock">
 
 <header class="app-header">
   <div class="brand">
@@ -29,9 +35,11 @@
 </header>
 
 <nav class="mode-bar" id="mode-bar" role="tablist" aria-label="选择工具">
-  <button type="button" role="tab" data-mode="quad" aria-selected="true">① 二次函数（形式互化 / 最值）</button>
-  <button type="button" role="tab" data-mode="trig" aria-selected="false">② 三角函数 · 直角三角形</button>
+  <button type="button" role="tab" data-mode="quad" aria-selected="true"><span class="mode-long">① 二次函数（形式互化 / 最值）</span><span class="mode-short">① 二次函数</span></button>
+  <button type="button" role="tab" data-mode="trig" aria-selected="false"><span class="mode-long">② 三角函数 · 直角三角形</span><span class="mode-short">② 三角函数</span></button>
 </nav>
+
+</div><!-- /.top-dock -->
 
 <main class="app-grid" id="quad-app">
 
@@ -83,9 +91,9 @@
         <select id="examples"></select>
         <p class="hint" style="margin:12px 0 0;font-size:12.5px;line-height:1.85;color:var(--ink-faint)">
           输入框支持：整数 <code>3</code>、分数 <code>-3/4</code>、小数 <code>0.75</code>（小数会被精确换算成分数）。<br>
-          快捷键（焦点不在输入框时）：<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> 切换形式 ·
-          <kbd>C</kbd> 复制报告 · <kbd>T</kbd> 切换主题 · <kbd>R</kbd> 重置图像视野 · <kbd>M</kbd> 切换工具。<br>
-          图像操作：滚轮缩放 · 拖动平移 · 悬停读数 · 双击复位。
+          <span class="kbd-hint">快捷键（焦点不在输入框时）：<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> 切换形式 ·
+          <kbd>C</kbd> 复制报告 · <kbd>T</kbd> 切换主题 · <kbd>R</kbd> 重置图像视野 · <kbd>M</kbd> 切换工具。</span><br>
+          图像操作：滚轮缩放 · 拖动平移 · 悬停读数 · 双击复位 · <span class="touch-hint">双指捏合缩放</span>。
         </p>
       </div>
     </section>
