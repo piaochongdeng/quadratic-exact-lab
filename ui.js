@@ -71,13 +71,18 @@
       factored: { a: '1', r1: '-1', r2: '3' },
       points: { p1x: '0', p1y: '3', p2x: '1', p2y: '0', p3x: '-1', p3y: '0' }
     },
-    domain: { mode: 'all', left: { value: '', open: true }, right: { value: '', open: true } },
+    domain: {
+      mode: 'all',
+      left: { value: '', open: true, unbounded: true },
+      right: { value: '', open: true, unbounded: true }
+    },
     view: 'rendered',
     report: null
   };
 
   var el = {};
   var debounceTimer = null;
+  var Desktop = window.QuadDesktop || null;   /* 桌面版由 preload 注入；网页版为 null */
 
   /* ================= 小工具 ================= */
 
@@ -162,12 +167,17 @@
     Array.prototype.forEach.call(document.querySelectorAll('input[name="dom"]'), function (r) {
       r.checked = (r.value === state.domain.mode);
     });
-    el.linf.checked = !state.domain.left.value;
-    el.rinf.checked = !state.domain.right.value;
+    el.linf.checked = !!state.domain.left.unbounded;
+    el.rinf.checked = !!state.domain.right.unbounded;
     el.lval.value = state.domain.left.value;
     el.rval.value = state.domain.right.value;
     el.lval.disabled = el.linf.checked;
     el.rval.disabled = el.rinf.checked;
+    el.lval.setAttribute('aria-disabled', el.linf.checked ? 'true' : 'false');
+    el.rval.setAttribute('aria-disabled', el.rinf.checked ? 'true' : 'false');
+    /* 勾上 ±∞ 时输入框会变灰禁用，这里把提示文字也换掉，避免用户以为是坏了 */
+    el.lval.placeholder = el.linf.checked ? '\u2212\u221e 无端点，取消勾选即可输入' : '左端点，如 -1 或 -3/2';
+    el.rval.placeholder = el.rinf.checked ? '+\u221e 无端点，取消勾选即可输入' : '右端点，如 3 或 7/2';
     el.lb.textContent = state.domain.left.open ? '(' : '[';
     el.rb.textContent = state.domain.right.open ? ')' : ']';
     el.lb.dataset.open = state.domain.left.open ? '1' : '0';
@@ -181,10 +191,10 @@
       return;
     }
     var L = state.domain.left, R = state.domain.right;
-    var lv = L.value ? L.value : '\u2212\u221e';
-    var rv = R.value ? R.value : '+\u221e';
-    var lb = (!L.value || L.open) ? '(' : '[';
-    var rb = (!R.value || R.open) ? ')' : ']';
+    var lv = (!L.unbounded && L.value) ? L.value : '\u2212\u221e';
+    var rv = (!R.unbounded && R.value) ? R.value : '+\u221e';
+    var lb = (L.unbounded || L.open) ? '(' : '[';
+    var rb = (R.unbounded || R.open) ? ')' : ']';
     el.intervalPreview.innerHTML = '';
     var sp = document.createElement('span');
     sp.style.fontFamily = 'var(--mono)';
@@ -209,8 +219,8 @@
     }
     input.domain = {
       mode: state.domain.mode,
-      left: { value: state.domain.left.value, open: state.domain.left.open },
-      right: { value: state.domain.right.value, open: state.domain.right.open }
+      left: { value: state.domain.left.unbounded ? '' : state.domain.left.value, open: state.domain.left.open },
+      right: { value: state.domain.right.unbounded ? '' : state.domain.right.value, open: state.domain.right.open }
     };
     return input;
   }
@@ -278,6 +288,18 @@
     catch (e) { return null; }
   }
 
+  /**
+   * 把一个端点归一化成 { value, open, unbounded }。
+   * 旧链接 / 旧 JSON 只有 { value, open }，此时「值为空」表示该侧无界；
+   * 新格式带 unbounded，直接采信——这正是修复「输入框无法输入」的关键：
+   * 不再用「值为空」去反推无界，否则空输入框会被自动勾上 ±∞ 并被禁用。
+   */
+  function normSide(side) {
+    var value = (side && side.value !== null && side.value !== undefined) ? String(side.value) : '';
+    var unbounded = (side && typeof side.unbounded === 'boolean') ? side.unbounded : (value.trim() === '');
+    return { value: value, open: !(side && side.open === false), unbounded: unbounded };
+  }
+
   function applyState(st) {
     if (!st) return;
     if (st.form && FIELDS[st.form]) state.form = st.form;
@@ -290,12 +312,12 @@
       if (typeof st.domain === 'string') state.domain.mode = st.domain;
       else {
         state.domain.mode = st.domain.mode === 'interval' ? 'interval' : 'all';
-        if (st.domain.left) state.domain.left = { value: st.domain.left.value || '', open: st.domain.left.open !== false };
-        if (st.domain.right) state.domain.right = { value: st.domain.right.value || '', open: st.domain.right.open !== false };
+        if (st.domain.left) state.domain.left = normSide(st.domain.left);
+        if (st.domain.right) state.domain.right = normSide(st.domain.right);
       }
     }
-    if (st.left) state.domain.left = { value: st.left.value || '', open: st.left.open !== false };
-    if (st.right) state.domain.right = { value: st.right.value || '', open: st.right.open !== false };
+    if (st.left) state.domain.left = normSide(st.left);
+    if (st.right) state.domain.right = normSide(st.right);
   }
   /* ================= 图像 ================= */
 
@@ -803,8 +825,17 @@
     Array.prototype.forEach.call(document.querySelectorAll('input[name="dom"]'), function (r) {
       r.addEventListener('change', function () {
         state.domain.mode = r.value;
+        if (r.value === 'interval' && state.domain.left.unbounded && state.domain.right.unbounded) {
+          /* 两侧都无界等于全体实数，与「自定义区间」矛盾；
+             自动取消左侧 −∞ 并把光标放进输入框，省得用户面对一个被禁用的框。 */
+          state.domain.left.unbounded = false;
+        }
         syncDomainUI();
         update();
+        if (r.value === 'interval' && !el.lval.disabled) {
+          el.lval.focus();
+          el.lval.select();
+        }
       });
     });
 
@@ -818,19 +849,23 @@
     });
     el.lval.addEventListener('input', function () {
       state.domain.left.value = el.lval.value;
+      state.domain.left.unbounded = el.lval.value.trim() === '' && state.domain.left.unbounded;
       renderIntervalPreview();
       scheduleUpdate();
     });
     el.rval.addEventListener('input', function () {
       state.domain.right.value = el.rval.value;
+      state.domain.right.unbounded = el.rval.value.trim() === '' && state.domain.right.unbounded;
       renderIntervalPreview();
       scheduleUpdate();
     });
     el.linf.addEventListener('change', function () {
-      if (el.linf.checked) state.domain.left.value = '';
+      state.domain.left.unbounded = el.linf.checked;
+      if (el.linf.checked) state.domain.left.value = '';   /* −∞ 没有端点数值 */
       syncDomainUI(); update();
     });
     el.rinf.addEventListener('change', function () {
+      state.domain.right.unbounded = el.rinf.checked;
       if (el.rinf.checked) state.domain.right.value = '';
       syncDomainUI(); update();
     });
@@ -972,6 +1007,181 @@
     window.addEventListener('load', function () { Plot.resize(); Plot.fit(); Plot.draw(); });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  /* ================= 对外 API（桌面版主进程调用 / 网页版调试） ================= */
+
+  window.QuadLab = {
+    /** 当前 Markdown 报告；没有有效报告时返回 null */
+    getMarkdown: function () {
+      return (state.report && state.report.ok) ? state.report.markdown : null;
+    },
+
+    /** 当前计算数据（顶点、判别式、最值等），无则返回 null */
+    getData: function () {
+      return (state.report && state.report.ok) ? state.report.data : null;
+    },
+
+    /** 当前输入条件，可原样喂回 setState */
+    getState: function () {
+      return JSON.parse(JSON.stringify({ form: state.form, values: state.values, domain: state.domain }));
+    },
+
+    /** 还原输入条件；成功返回 true */
+    setState: function (st) {
+      if (!st || typeof st !== 'object') return false;
+      if (st.form && !FIELDS[st.form]) return false;
+      try {
+        applyState(st);
+        syncFormTabs();
+        buildCoefInputs();
+        syncDomainUI();
+        update();
+        return true;
+      } catch (e) { return false; }
+    },
+
+    /** 图像画布导出为 PNG dataURL；无图像返回 null */
+    getCanvasDataURL: function () {
+      if (!Plot.canvas || !Plot.data) return null;
+      try {
+        /* 临时铺一层背景色，避免导出成透明底 */
+        var src = Plot.canvas;
+        var out = document.createElement('canvas');
+        out.width = src.width; out.height = src.height;
+        var ctx = out.getContext('2d');
+        var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+        ctx.fillStyle = dark ? '#1b2027' : '#ffffff';
+        ctx.fillRect(0, 0, out.width, out.height);
+        ctx.drawImage(src, 0, 0);
+        return out.toDataURL('image/png');
+      } catch (e) { return null; }
+    },
+
+    /** 切换输入形式（供桌面菜单调用） */
+    setForm: function (form) {
+      if (!FIELDS[form]) return false;
+      state.form = form;
+      syncFormTabs(); buildCoefInputs(); update();
+      return true;
+    },
+
+    /** 载入内置示例：delta=+1 下一个，-1 上一个 */
+    stepExample: function (delta) {
+      var n = EXAMPLES.length;
+      if (!n) return false;
+      var cur = Number(el.examples.value) || 0;
+      var next = ((cur + (delta || 1)) % n + n) % n;
+      el.examples.value = String(next);
+      var ex = EXAMPLES[next];
+      if (!ex) return false;
+      applyState(ex.state);
+      syncFormTabs(); buildCoefInputs(); syncDomainUI(); update();
+      return true;
+    },
+
+    /** 复制报告 / 切主题 / 视野操作，供菜单复用同一套逻辑 */
+    copyMarkdown: function () { el.btnCopy.click(); },
+    toggleTheme: function () { el.btnTheme.click(); },
+    resetView: function () { el.btnReset.click(); },
+    zoomIn: function () { el.btnZoomIn.click(); },
+    zoomOut: function () { el.btnZoomOut.click(); },
+
+    /** 报告当前是否可用 */
+    isReady: function () { return !!(state.report && state.report.ok); },
+
+    version: '1.2.0'
+  };
+
+  /* ================= 桌面版菜单事件 ================= */
+
+  function bindDesktop() {
+    if (!Desktop) return;
+    document.documentElement.classList.add('is-desktop');
+    var map = {
+      'menu:form-general': function () { window.QuadLab.setForm('general'); },
+      'menu:form-vertex': function () { window.QuadLab.setForm('vertex'); },
+      'menu:form-factored': function () { window.QuadLab.setForm('factored'); },
+      'menu:form-points': function () { window.QuadLab.setForm('points'); },
+      'menu:example-prev': function () { window.QuadLab.stepExample(-1); },
+      'menu:example-next': function () { window.QuadLab.stepExample(1); },
+      'menu:theme': function () { window.QuadLab.toggleTheme(); },
+      'menu:reset-view': function () { window.QuadLab.resetView(); },
+      'menu:zoom-in': function () { window.QuadLab.zoomIn(); },
+      'menu:zoom-out': function () { window.QuadLab.zoomOut(); }
+    };
+    Object.keys(map).forEach(function (ch) { Desktop.on(ch, map[ch]); });
+
+    /* 桌面版：把浏览器语义的按钮换成原生文件对话框 */
+    el.btnDownload.title = '导出 Markdown 文件（Ctrl+S）';
+    el.btnPrint.title = '导出 PDF（Ctrl+P）';
+    el.btnShare.textContent = '导出图像';
+    el.btnShare.title = '把当前函数图像导出为 PNG（Ctrl+Shift+E）';
+
+    el.btnDownload.addEventListener('click', function () { saveText({
+      title: '导出 Markdown 报告',
+      defaultPath: '二次函数解析报告.md',
+      filters: [{ name: 'Markdown', extensions: ['md'] }, { name: '纯文本', extensions: ['txt'] }],
+      content: (state.report && state.report.ok) ? state.report.markdown : ''
+    }); });
+
+    el.btnShare.addEventListener('click', function () { exportPng(); });
+
+    var loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.className = 'btn btn-sm';
+    loadBtn.textContent = '载入数据';
+    loadBtn.title = '从 JSON 还原输入条件（Ctrl+O）';
+    loadBtn.addEventListener('click', function () { loadJson(); });
+    el.btnShare.parentNode.insertBefore(loadBtn, el.btnShare);
+  }
+
+  /* ================= 桌面版文件读写 ================= */
+
+  /** 交给主进程弹原生保存对话框；没有内容时给出提示 */
+  function saveText(payload) {
+    if (!payload.content) { toast('当前没有可导出的内容'); return; }
+    Desktop.saveText(payload).then(function (r) {
+      if (r && r.ok) toast('已保存：' + r.filePath);
+    }).catch(function () { toast('保存失败'); });
+  }
+
+  /** 导出图像 PNG：浏览器版走下载，桌面版走原生对话框 */
+  function exportPng() {
+    var url = window.QuadLab.getCanvasDataURL();
+    if (!url) { toast('当前没有可导出的图像'); return; }
+    if (!Desktop) {
+      var a = document.createElement('a');
+      a.href = url; a.download = '二次函数图像.png';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      toast('已导出函数图像');
+      return;
+    }
+    var b64 = url.replace(/^data:image\/png;base64,/, '');
+    Desktop.saveText({
+      title: '导出函数图像',
+      defaultPath: '二次函数图像.png',
+      filters: [{ name: 'PNG 图片', extensions: ['png'] }],
+      base64: b64
+    }).then(function (r) { if (r && r.ok) toast('已保存：' + r.filePath); });
+  }
+
+  /** 从 JSON 还原输入条件 */
+  function loadJson() {
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0];
+      if (!f) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        var ok = false;
+        try { ok = window.QuadLab.setState(JSON.parse(String(fr.result))); } catch (e) { ok = false; }
+        toast(ok ? '已载入输入数据' : '文件格式不符合本工具的输入结构');
+      };
+      fr.readAsText(f, 'utf-8');
+    });
+    inp.click();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { boot(); bindDesktop(); });
+  else { boot(); bindDesktop(); }
 })();

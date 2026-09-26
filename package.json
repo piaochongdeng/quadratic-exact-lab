@@ -1,0 +1,74 @@
+{
+  "name": "quadratic-exact-lab",
+  "version": "1.2.0",
+  "private": true,
+  "description": "二次函数精确解析器：一般式 / 顶点式 / 交点式互化、三点确定函数、顶点与对称轴、判别式与零点、自定义定义域最值与值域，全程分数与最简根式精确运算。",
+  "author": "piaochong <piaochong20120412@163.com>",
+  "license": "MIT",
+  "main": "desktop/main.js",
+  "scripts": {
+    "desktop": "electron .",
+    "desktop:dev": "electron . --enable-logging",
+    "dist": "electron-builder --win --publish never && node desktop/rename-artifacts.js",
+    "dist:portable": "electron-builder --win zip --publish never",
+    "dist:installer": "electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "electron": "^38.8.6",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "cn.piaochong.quadratic-exact-lab",
+    "productName": "二次函数精确解析器",
+    "copyright": "Copyright © 2026 piaochong",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "index.html",
+      "styles.css",
+      "engine.js",
+      "report.js",
+      "markdown.js",
+      "ui.js",
+      "vendor/**/*",
+      "desktop/main.js",
+      "desktop/preload.js",
+      "desktop/about.html",
+      "desktop/icon.png",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/icon.ico",
+      "artifactName": "二次函数精确解析器-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "二次函数精确解析器",
+      "artifactName": "二次函数精确解析器-${version}-安装版-${arch}.${ext}",
+      "uninstallDisplayName": "二次函数精确解析器 ${version}",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

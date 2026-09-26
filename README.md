@@ -1,8 +1,10 @@
-﻿# 二次函数精确解析器 · quadratic-exact-lab
+# 二次函数精确解析器 · quadratic-exact-lab
 
 输入**一般式 / 顶点式 / 交点式**中的任意一种，自动完成三种形式的互化、顶点坐标与对称轴、
 判别式与零点、单调性、图像特征，并可在**自定义定义域**上求出最大值、最小值与值域；
 也可以直接给出**三个已知点**，反求经过它们的二次函数。
+
+既可以**双击 `index.html` 在浏览器里用**，也可以用打包好的 **Windows 桌面应用**（免安装 ZIP 或安装程序）。
 **所有结果都以精确值呈现：凡不是整数的数值，一律用分数或根号表示**，绝不依赖浮点近似。
 
 ![预览](docs/preview-light.png)
@@ -28,6 +30,7 @@
 | Markdown 报告 | 生成结构完整、表格对齐、公式规范的 Markdown；可复制、可下载 `.md`、可打印 |
 | 图像可视化 | Canvas 绘制抛物线，标注顶点、零点、定义域端点（空心=开、实心=闭）、对称轴、最值点；定义域外的部分用灰色虚线表示 |
 | 离线可用 | 数学排版使用**随包携带的 KaTeX**，无需联网，双击 `index.html` 即可使用 |
+| **桌面应用** | 提供 Windows 免安装版（ZIP）与安装版（NSIS），带原生菜单、原生保存对话框、文件关联式导出；同样完全离线 |
 
 ### 额外功能
 
@@ -38,10 +41,24 @@
 - **容错输入**：支持小数（`0.75` → `3/4`，精确换算，不是近似）、分数（`-3/4`）、全角字符（`１`、`－２`）。
 - **结果自检**：报告最后一节会代回原式验证顶点、零点与判别式。
 - **打印排版**：`@media print` 规则会自动隐藏输入区与工具栏，只输出报告正文。
+- **桌面版专属**：原生菜单（文件 / 编辑 / 输入形式 / 视图 / 帮助）、`Ctrl+S` 直接保存 Markdown、`Ctrl+P` 导出 A4 PDF、`Ctrl+Shift+E` 导出图像 PNG、`Ctrl+O` 载入输入 JSON、窗口大小与位置记忆、单实例运行。
 
 ---
 
 ## 二、快速开始
+
+### 方式一：桌面应用（Windows）
+
+到 [Releases](https://github.com/piaochongdeng/quadratic-exact-lab/releases) 下载：
+
+| 文件 | 说明 |
+| --- | --- |
+| `二次函数精确解析器-1.2.0-免安装版-x64.zip` | 解压后双击 `二次函数精确解析器.exe` 即可，不写注册表 |
+| `二次函数精确解析器-1.2.0-安装版-x64.exe` | 安装程序，可自选目录，自动创建桌面与开始菜单快捷方式 |
+
+两种方式都**不需要安装 Node.js 或任何运行库**，全程离线。
+
+### 方式二：浏览器
 
 直接双击 `index.html` 即可（无需服务器、无需联网、无需构建）。
 
@@ -51,6 +68,21 @@
 # 任选其一
 npx --yes serve .
 python -m http.server 8080
+```
+
+### 从源码构建桌面版
+
+```powershell
+npm install          # 安装 Electron 与 electron-builder
+npm run desktop      # 本地直接运行（开发用）
+npm run dist         # 打包出免安装 ZIP + 安装程序，产物在 dist-desktop/
+```
+
+国内网络如果下载 Electron 缓慢，可先设置镜像：
+
+```powershell
+$env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
 ```
 
 ### 输入约定
@@ -75,7 +107,16 @@ quadratic-exact-lab/
 ├─ engine.js           精确计算引擎：Frac（有理数）、Surd（二次根式）、Quad、定义域分析、TeX 排版
 ├─ report.js           把计算结果组织成完整 Markdown 报告（纯函数）
 ├─ markdown.js         自研 Markdown 渲染器（公式受保护，交给 KaTeX）
-├─ ui.js               界面逻辑：输入、事件、URL 状态、Canvas 绘图
+├─ ui.js               界面逻辑：输入、事件、URL 状态、Canvas 绘图、桌面版桥接
+├─ package.json        桌面版构建配置（electron-builder）
+├─ desktop/            桌面应用外壳
+│  ├─ main.js          主进程：窗口、原生菜单、导出对话框、单实例
+│  ├─ preload.js       最小 IPC 桥（contextIsolation，渲染进程无 Node）
+│  ├─ about.html       关于 / 快捷键一览窗口
+│  ├─ make-icon.py     图标生成脚本（Pillow 绘制，无外部素材）
+│  ├─ icon.png         应用图标（512×512）
+│  ├─ icon.ico         应用图标（多尺寸）
+│  └─ smoke*.js        桌面版端到端冒烟测试
 ├─ vendor/katex/       随包携带的 KaTeX（离线数学排版）
 ├─ docs/               预览截图
 └─ tests/              自测脚本（Node.js 运行）
@@ -109,6 +150,7 @@ node tests/report.test.js      # 报告生成 71 项：结构完整性、互化�
 node tests/edge.test.js        # 边界用例 14 项：退化区间、开区间、负分数、极大系数、三点、全角输入
 node tests/markdown.test.js    # Markdown 渲染器：标题/列表/表格/引用/公式
 node tests/dom-check.js        # 页面与脚本的 id 引用一致性
+node tests/desktop.test.js     # 桌面版端到端（需先 npm install；未装 Electron 会自动跳过）
 ```
 
 也可以一次跑完：
@@ -129,6 +171,7 @@ node tests/run-all.js
 | `y = x² − 4x + 1` | 零点 `2 ± √3`，顶点 `(2, −3)` |
 | `y = 2x² − 4x − 1` | 零点 `1 ± √6⁄2`（自动约分） |
 | `y = x² + 1` | Δ < 0，明确说明**不存在**实数零点与交点式 |
+| 自定义区间输入 `−3/2` 与 `7/2` | 两个输入框都可正常输入，值域为 `[2, 33/4]`（回归测试：曾经输入框被 ±∞ 自动勾选而禁用） |
 | `y = x² − 70` | Δ = 280 → 报告中给出 `√280 = 2√70`，零点 `±√70` |
 | 三点 `(0, 3) (1, 0) (−1, 0)` | 解得 `y = −3x² + 3`，顶点 `(0, 3)`，零点 `±1` |
 | 三点 `(0, −2) (1, −1) (2, 2)` | 解得 `y = x² − 2`，零点 `±√2`（根式已化为最简） |
@@ -146,6 +189,8 @@ node tests/run-all.js
   空心圆表示开区间端点，灰色虚线表示定义域外的图像走势。
 - **右下**：Markdown 报告，可在「渲染视图」与「Markdown 源码」之间切换。
 - 修改任意输入会实时重算（有 130ms 防抖），输入非法时在输入框下方给出明确提示。
+- **定义域端点**：勾选 `−∞` / `+∞` 表示该侧无界，此时对应输入框会置灰并提示「取消勾选即可输入」；取消勾选后立刻可以打字。两侧都无界时程序会提示改用「全体实数」。
+- **桌面版**：顶部是原生菜单栏；「文件」菜单里的导出会弹出系统保存对话框，`帮助 → 快捷键一览`（或 <kbd>F1</kbd>）列出全部快捷键。
 
 ---
 
@@ -160,6 +205,7 @@ node tests/run-all.js
   正文也不会被公式里的特殊字符破坏。
 - **不错版的实现要点**：网格列使用 `minmax(0, 1fr)` 防止内容撑破容器；
   表格与行间公式各自独立横向滚动；会变化的区域预留固定高度，避免重算时页面跳动。
+- **桌面版架构**：渲染进程仍然是**同一个 `index.html`**，与网页版共用全部计算与渲染代码；`preload.js` 只通过 `contextBridge` 暴露 `QuadDesktop`（菜单事件订阅、版本信息、保存对话框），`contextIsolation: true` 且 `nodeIntegration: false`，渲染进程拿不到 Node。
 - **KaTeX 授权**：`vendor/katex/LICENSE`（MIT）。
 
 ---

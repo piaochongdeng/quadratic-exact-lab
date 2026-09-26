@@ -1,8 +1,17 @@
-﻿# 临时探针 / 调试产物
+# 临时探针 / 调试产物
 _*.js
 _*.html
 _*.png
 !docs/*.png
+!desktop/icon.png
+
+# 桌面版依赖与打包产物（由 npm install / npm run dist 生成）
+node_modules/
+dist-desktop/
+desktop/smoke-out/
+desktop/smoke-result.json
+desktop/smoke-export-result.json
+desktop/smoke-domain-result.json
 
 # 系统与编辑器
 .DS_Store
@@ -11,4 +20,3 @@ desktop.ini
 *.log
 .idea/
 .vscode/
-node_modules/

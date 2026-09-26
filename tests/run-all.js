@@ -8,7 +8,8 @@ const SUITES = [
   ['report.test.js', '报告生成 + KaTeX 排版校验'],
   ['edge.test.js', '边界用例'],
   ['markdown.test.js', 'Markdown 渲染器'],
-  ['dom-check.js', '页面与脚本 id 一致性']
+  ['dom-check.js', '页面与脚本 id 一致性'],
+  ['desktop.test.js', '桌面版（Electron）端到端']
 ];
 
 let failed = [];

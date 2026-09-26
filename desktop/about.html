@@ -1,0 +1,120 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<title>关于 · 二次函数精确解析器</title>
+<style>
+  :root {
+    --bg: #f7f6f3; --card: #ffffff; --line: #e3ded6; --ink: #23272e; --ink-soft: #5c6572;
+    --ink-faint: #8b939e; --accent: #2b6cb0; --accent-soft: #e8f0fa; --warm: #b45309;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: "Cascadia Code", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171c; --card: #1b2027; --line: #2b323b; --ink: #e7eaee; --ink-soft: #a9b2bd;
+            --ink-faint: #7d8691; --accent: #6aa6e0; --accent-soft: #1d2b3d; --warm: #e0a45e; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--sans); background: var(--bg); color: var(--ink);
+    padding: 22px 24px 20px; overflow-y: auto; font-size: 14px; line-height: 1.7;
+  }
+  .head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .mark {
+    width: 48px; height: 48px; flex: 0 0 48px; border-radius: 12px;
+    background: linear-gradient(135deg, #2b6cb0, #1d4f85); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font: italic 700 24px Georgia, serif;
+  }
+  h1 { font-size: 17px; margin: 0 0 2px; letter-spacing: .2px; }
+  .sub { font-size: 12.5px; color: var(--ink-faint); margin: 0; }
+  .ver { margin-left: auto; font: 12px var(--mono); color: var(--ink-faint); }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--ink-soft); font-size: 13px; }
+  h2 { font-size: 13px; text-transform: none; letter-spacing: .4px; color: var(--ink-soft); margin: 18px 0 8px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-soft); font-weight: 600; background: var(--card); }
+  kbd {
+    font: 12px var(--mono); background: var(--card); border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; white-space: nowrap;
+  }
+  .note { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 9px 12px; border-radius: 6px; font-size: 12.5px; color: var(--ink-soft); }
+  .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-faint); }
+  code { font: 12px var(--mono); background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  .warm { color: var(--warm); }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="mark">y</div>
+    <div>
+      <h1>二次函数精确解析器</h1>
+      <p class="sub" id="sub">桌面版 · 离线可用</p>
+    </div>
+    <div class="ver" id="ver"></div>
+  </div>
+
+  <div id="about-view">
+    <p>输入<b>一般式 / 顶点式 / 交点式 / 三个已知点</b>中的任意一种，自动完成形式互化、顶点与对称轴、判别式与零点、单调性、图像特征，并在自定义定义域上求出最大值、最小值与值域。</p>
+    <p class="muted">所有结果都是<b>精确值</b>：凡不是整数一律用分数或最简根式表示（如 <code>√280 = 2√70</code>），浮点只用于绘图坐标与明确标注的「近似值」对照列。</p>
+    <h2>文件格式</h2>
+    <table>
+      <tr><th>菜单</th><th>说明</th></tr>
+      <tr><td>导出 Markdown…</td><td>完整报告，含全部公式的 LaTeX 源码，可直接贴进笔记软件</td></tr>
+      <tr><td>导出 PDF…</td><td>A4 排版，自动隐藏输入区与工具栏，只输出报告正文</td></tr>
+      <tr><td>导出函数图像 PNG…</td><td>当前视野的图像，含顶点、零点、已知点、定义域端点标注</td></tr>
+      <tr><td>导出 / 载入输入 JSON…</td><td>保存与还原当前输入条件，便于存档或批改</td></tr>
+    </table>
+    <h2>离线说明</h2>
+    <p class="muted">数学排版由随包携带的 KaTeX 完成（MIT 许可），计算引擎为自研的 <code>BigInt</code> 有理数与二次根式运算，<b>全程不联网</b>。</p>
+    <div class="foot">Electron <span id="ver-e"></span> · Chromium <span id="ver-c"></span> · Node <span id="ver-n"></span></div>
+  </div>
+
+  <div id="keys-view" hidden>
+    <h2>输入与计算</h2>
+    <table>
+      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></td><td>切换一般式 / 顶点式 / 交点式 / 三点</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd> … <kbd>4</kbd></td><td>同上（菜单栏入口）</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td><td>上一个 / 下一个内置示例</td></tr>
+    </table>
+    <h2>图像</h2>
+    <table>
+      <tr><td>滚轮</td><td>以指针为中心缩放</td></tr>
+      <tr><td>拖动</td><td>平移视野</td></tr>
+      <tr><td>悬停</td><td>显示该横坐标对应的精确值与近似值</td></tr>
+      <tr><td>双击 / <kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>恢复默认视野</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd></td><td>放大 / 缩小图像</td></tr>
+    </table>
+    <h2>报告与界面</h2>
+    <table>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></td><td>复制完整 Markdown 报告</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>导出 Markdown 文件</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>导出 PDF</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td><td>导出函数图像 PNG</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>载入输入数据 JSON</td></tr>
+      <tr><td><kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>T</kbd></td><td>切换深色 / 浅色主题</td></tr>
+      <tr><td><kbd>F1</kbd></td><td>打开本窗口</td></tr>
+    </table>
+    <div class="note">提示：输入框获得焦点时，单键快捷键（<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>T</kbd>）会自动让位给文字输入，不会误触发。</div>
+  </div>
+
+<script>
+  var q = new URLSearchParams(location.search);
+  var showKeys = q.get('keys') === '1';
+  document.getElementById('about-view').hidden = showKeys;
+  document.getElementById('keys-view').hidden = !showKeys;
+  document.getElementById('ver').textContent = 'v' + (q.get('v') || '');
+  document.getElementById('sub').textContent = showKeys ? '快捷键一览' : '桌面版 · 离线可用';
+  if (window.QuadDesktop && window.QuadDesktop.info) {
+    window.QuadDesktop.info().then(function (i) {
+      document.getElementById('ver-e').textContent = i.electron;
+      document.getElementById('ver-c').textContent = i.chrome;
+      document.getElementById('ver-n').textContent = i.node;
+    }).catch(function () {});
+  }
+</script>
+</body>
+</html>
