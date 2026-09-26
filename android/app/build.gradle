@@ -1,0 +1,82 @@
+// quadratic-exact-lab · app 模块
+
+plugins {
+    id 'com.android.application'
+}
+
+/* 可选：如果 android/keystore.properties 存在就用它给 release 签名（该文件不进仓库）。
+   不存在时 release 产物不签名，只能用于本地检查；正式分发请用 debug 包或自备签名。 */
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+def hasKeystore = keystoreFile.exists()
+if (hasKeystore) {
+    keystoreFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace 'cn.piaochong.quadraticexactlab'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'cn.piaochong.quadraticexactlab'
+        minSdk 24                 // Android 7.0，覆盖绝大多数在网设备
+        targetSdk 35
+        versionCode 10400
+        versionName '1.4.0'
+
+        resourceConfigurations += ['zh', 'en']
+    }
+
+    /* 网页资源来自 www/（由 scripts/make-www.js 生成），
+       这里把整个 www/ 作为 assets 的根打进去，不做任何加工。 */
+    sourceSets {
+        main {
+            assets.srcDirs = [rootProject.file('../www')]
+        }
+    }
+
+    signingConfigs {
+        if (hasKeystore) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            /* 不加版本后缀：产物文件名里已经有 buildType，再加会变成 1.4.0-debug-debug */
+        }
+        release {
+            minifyEnabled false          // 关掉 R8：@JavascriptInterface 的桥方法被裁掉会静默失效
+            shrinkResources false
+            if (hasKeystore) signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    /* 产物名保持 ASCII —— GitHub Releases 会把非 ASCII 附件名换成「.」 */
+    android.applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "quadratic-exact-lab-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/*.kotlin_module']
+        }
+    }
+}

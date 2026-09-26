@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      直接沿用系统 Material 主题，不引入 AppCompat：
+      本应用只有一个全屏 WebView，用不到任何 AppCompat 的特性。
+      状态栏跟随主题（浅色），窗口背景与网页底色一致，避免启动时闪白。
+    -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F4F2EE</item>
+        <item name="android:colorBackground">#F4F2EE</item>
+        <item name="android:statusBarColor">#F4F2EE</item>
+        <item name="android:navigationBarColor">#F4F2EE</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

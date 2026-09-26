@@ -1,0 +1,23 @@
+// quadratic-exact-lab · Android 工程 settings
+//
+// 本工程刻意不依赖 AndroidX / AppCompat：
+// 整个应用就是一个全屏 WebView，用系统框架足够，依赖越少构建越稳。
+
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'quadratic-exact-lab-android'
+include ':app'

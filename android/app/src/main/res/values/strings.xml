@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">二次函数精确解析器</string>
+    <string name="app_subtitle">形式互化 · 定义域最值 · 三角函数</string>
+</resources>

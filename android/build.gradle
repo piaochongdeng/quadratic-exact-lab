@@ -1,0 +1,8 @@
+// quadratic-exact-lab · Android 工程根 build
+//
+// AGP 版本与 Gradle 版本的硬约束：AGP 8.7.x 需要 Gradle 8.9 及以上。
+// 本机工具链固定在 D:\android-toolchain（Gradle 8.9 + SDK 35 + JDK 17）。
+
+plugins {
+    id 'com.android.application' version '8.7.2' apply false
+}

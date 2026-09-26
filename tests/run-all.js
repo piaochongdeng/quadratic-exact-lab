@@ -1,4 +1,4 @@
-﻿/* 一键跑完所有自测：node tests/run-all.js */
+/* 一键跑完所有自测：node tests/run-all.js */
 'use strict';
 const { spawnSync } = require('child_process');
 const path = require('path');
@@ -10,7 +10,8 @@ const SUITES = [
   ['markdown.test.js', 'Markdown 渲染器'],
   ['trig.test.js', '三角函数与直角三角形（精确值 / 反推 / 报告排版）'],
   ['dom-check.js', '页面与脚本 id 一致性'],
-  ['desktop.test.js', '桌面版（Electron）端到端']
+  ['desktop.test.js', '桌面版（Electron）端到端'],
+  ['android.test.js', 'Android（真机 / 模拟器）端到端']
 ];
 
 let failed = [];
