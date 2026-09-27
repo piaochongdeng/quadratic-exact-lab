@@ -42,3 +42,9 @@ docs/ANDROID-HANDOFF.md
 
 # 发布用的产物副本（上传 Release 前临时放这里）
 dist-release/
+
+# 官网的构建 / 复核产物：都能由 scripts 重新生成，不进仓库。
+# 发布目录 docs/ 只需要 index.html、site/{site.js,site.css,img/}、app/、releases.json。
+# 注意：.gitignore 的行尾注释会被当成模式的一部分，注释必须单独成行。
+docs/screens/
+docs/site/shots/

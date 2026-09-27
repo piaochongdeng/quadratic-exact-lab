@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>二次函数精确解析器 · 结果全是分数与根号，不出现浮点近似</title>
+<meta name="description" content="二次函数精确解析器：三种形式互化、精确零点、根式化简、区间最值，全部用有理数与二次根式精确运算，结论里不出现浮点近似。提供 Windows 与 Android 版，完全离线，不申请任何权限。">
+<meta name="theme-color" content="#14171c">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://piaochongdeng.github.io/quadratic-exact-lab/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="二次函数精确解析器">
+<meta property="og:description" content="结果全是分数与根号，不出现浮点近似。Windows / Android，完全离线。">
+<meta property="og:image" content="site/img/desktop-quad.webp">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232b6cb0'/%3E%3Ctext x='32' y='45' font-size='36' font-family='Georgia,serif' font-weight='700' fill='%23fff' text-anchor='middle'%3Ex%C2%B2%3C/text%3E%3C/svg%3E">
+
+<link rel="stylesheet" href="app/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="site/site.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要内容</a>
+
+<!-- ===================== 顶栏 ===================== -->
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <span class="brand-mark">x²</span>
+      <span class="brand-name">二次函数精确解析器<small>Quadratic Exact Lab</small></span>
+    </a>
+    <nav class="nav" aria-label="主导航">
+      <a href="#why">为什么精确</a>
+      <a href="#features">功能</a>
+      <a href="#shots">界面</a>
+      <a href="#download">下载</a>
+      <a href="app/">在线试用</a>
+    </nav>
+    <!-- 窄屏上主导航会收起来，右上角留一个「下载」入口，
+         否则顶栏右边是一片空白，用户还得往下翻才找得到下载 -->
+    <a class="topbar-cta" href="#download">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 19h16"/></svg>
+      下载
+    </a>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ===================== Hero ===================== -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+
+      <div>
+        <span class="eyebrow"><span class="dot"></span>完全离线 · 不申请任何权限 · 结论零浮点误差</span>
+
+        <h1>二次函数<br><span class="grad">精确解析器</span></h1>
+
+        <p class="hero-lead">
+          全程用<strong>有理数与最简二次根式</strong>运算。输入 <span class="tex">$2x^{2}-4x-1$</span>，
+          得到的是 <strong class="tex">$x = 1 \pm \dfrac{\sqrt{6}}{2}$</strong>，
+          而不是一个约等于的小数。近似值也有，但它只是附带，不是答案。
+        </p>
+
+        <div class="hero-math" aria-label="精确值与浮点值对比">
+          <div class="hero-math-row muted">
+            <span class="tag tag-bad">浮点</span>
+            <span class="tex">$x = 2.224744871391589$</span>
+          </div>
+          <div class="hero-math-row">
+            <span class="tag tag-good">精确</span>
+            <span class="tex">$x = 1 + \dfrac{\sqrt{6}}{2} \approx 2.2247448714$</span>
+          </div>
+          <p class="hero-math-note">
+            两行数值看起来一样，但上面那行在第 16 位就已经是错的，下面那行永远精确。
+          </p>
+        </div>
+
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" data-cta-primary href="#download">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 19h16"/></svg>
+            <span data-cta-primary-label>下载</span>
+          </a>
+          <a class="btn btn-outline-on-dark btn-lg" href="app/">
+            在线试用
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5"/></svg>
+          </a>
+        </div>
+
+        <div class="hero-meta">
+          <span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            Windows 10+ 与 Android 7.0+
+          </span>
+          <span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            断网可用
+          </span>
+          <span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            零权限、无广告、无内购
+          </span>
+        </div>
+      </div>
+
+      <div class="hero-shot">
+        <figure class="hero-shot-frame">
+          <img src="site/img/hero-panel.webp"
+               srcset="site/img/hero-panel.webp 982w, site/img/hero-panel@2x.webp 1964w"
+               sizes="(max-width: 1000px) 92vw, 780px"
+               width="982" height="544" decoding="async"
+               alt="软件图像面板：抛物线画出顶点 (1/2, 1/2) 与两个零点 x = 1/2 ± √3，标注全部是精确值">
+          <figcaption>
+            深色主题 · 图像面板。
+            输入 <span class="tex">$a=-\dfrac{1}{6},\; b=\dfrac{1}{6},\; c=\dfrac{11}{24}$</span>，
+            图上标出的顶点与零点都是精确值，不是四舍五入后的近似。
+          </figcaption>
+        </figure>
+      </div>
+
+    </div>
+  </div>
+  <div class="hero-fade"></div>
+</section>
+
+<!-- ===================== 为什么精确 ===================== -->
+<section class="section" id="why">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">Why exact</span>
+      <h2>同一个题目，两种答案</h2>
+      <p class="section-sub">
+        计算机里的 <code>double</code> 是二进制小数，写不下 <code>1/3</code>、<code>0.1</code> 这类值，
+        每一次运算都会留下一点点误差，再经过开方、判别式、配方，误差被放大。
+        本工具从头到尾只做<strong>分数与根式的精确运算</strong>，不存在这个环节。
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="compare-card reveal">
+        <h3>普通计算器 / 脚本 <span class="pill pill-bad">近似</span></h3>
+        <p class="who">用双精度浮点数求解</p>
+        <div class="compare-eq tex">$2x^2 - 4x - 1 = 0 \;\Rightarrow\; x = 2.224744871391589$</div>
+        <div class="compare-eq tex">$\Delta = 24.000000000000004$</div>
+        <p class="compare-verdict">
+          第 16 位开始失真。代入验算时残差不为 0，<b>无法判断根是否真的是根</b>；
+          根式化简、分母有理化、嵌套去根号这类操作更是无从谈起。
+        </p>
+      </div>
+
+      <div class="compare-card win reveal" data-d="1">
+        <h3>本工具 <span class="pill pill-good">精确</span></h3>
+        <p class="who">用有理数与二次根式求解</p>
+        <div class="compare-eq tex">$2x^2 - 4x - 1 = 0 \;\Rightarrow\; x = 1 \pm \dfrac{\sqrt{6}}{2}$</div>
+        <div class="compare-eq tex">$\Delta = 24 \;\Rightarrow\; \sqrt{\Delta} = 2\sqrt{6}$</div>
+        <p class="compare-verdict">
+          根式自动化简到最简形式，代入验算的结果<b>严格等于 0</b>。
+          结论里的每一个数都是闭式，抄到卷子上就是标准答案。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 功能 ===================== -->
+<section class="section" id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">Features</span>
+      <h2>它能做什么</h2>
+      <p class="section-sub">围绕「精确」两个字展开，不做花哨但算不准的功能。</p>
+    </div>
+
+    <div class="features">
+
+      <article class="feature reveal">
+        <div class="feature-idx">01</div>
+        <h3>三种形式互化</h3>
+        <p>一般式、顶点式、交点式一步互换，顶点、对称轴、开口方向同时给出。</p>
+        <div class="fx tex">$ax^2+bx+c \;\Longleftrightarrow\; a(x-h)^2+k \;\Longleftrightarrow\; a(x-x_1)(x-x_2)$</div>
+      </article>
+
+      <article class="feature reveal" data-d="1">
+        <div class="feature-idx">02</div>
+        <h3>精确零点</h3>
+        <p>判别式按有理数比较，开方结果自动化成最简根式，分母该有理化就理。</p>
+        <div class="fx tex">$x = \dfrac{-b \pm \sqrt{b^2-4ac}}{2a} \;\Rightarrow\; \dfrac{2 \pm \sqrt{6}}{2}$</div>
+      </article>
+
+      <article class="feature reveal" data-d="2">
+        <div class="feature-idx">03</div>
+        <h3>嵌套根式去根号</h3>
+        <p>能写成有限根式的双层根号会替你拆开；拆不出来的会明确说「不能写成有限根式」，而不是塞个小数给你。</p>
+        <div class="fx tex">$\sqrt{a+b\sqrt{d}} = \sqrt{\tfrac{a+r}{2}} \pm \sqrt{\tfrac{a-r}{2}},\; r=\sqrt{a^2-b^2d}$</div>
+      </article>
+
+      <article class="feature reveal">
+        <div class="feature-idx">04</div>
+        <h3>区间最值分析</h3>
+        <p>自定义定义域后，按顶点是否落在区间内分情况讨论，开区间端点、无界端都算得清清楚楚。</p>
+        <div class="fx tex">$x \in [m,\,n] \;\Rightarrow\; \text{值域}\; [\,f_{\min},\,f_{\max}\,]$</div>
+      </article>
+
+      <article class="feature reveal" data-d="1">
+        <div class="feature-idx">05</div>
+        <h3>三角函数工作区</h3>
+        <p>同一条引擎：特殊角给精确值，非特殊角按你设定的位数给近似值，并且会标出来是近似。</p>
+        <div class="fx tex">$\tan 60^\circ = \sqrt{3},\quad \sin 15^\circ = \dfrac{\sqrt{6}-\sqrt{2}}{4}$</div>
+      </article>
+
+      <article class="feature reveal" data-d="2">
+        <div class="feature-idx">06</div>
+        <h3>九节报告导出</h3>
+        <p>一键生成完整解答报告，含配方与因式分解详解、单调性、求解步骤与结果检验，可复制、下载或打印。</p>
+        <div class="fx tex">$\text{结论速览} \to \text{已知条件} \to \cdots \to \text{结果检验}$</div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 界面 ===================== -->
+<section class="section" id="shots">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">Screenshots</span>
+      <h2>界面</h2>
+      <p class="section-sub">同一套代码，桌面与手机两副面孔；手机上连数学键盘都给你备好了，<code>√</code> 不用自己想办法打。</p>
+    </div>
+
+    <div class="shots-tabs" role="tablist" aria-label="界面截图切换">
+      <button type="button" role="tab" aria-selected="true" aria-controls="shots-desktop" id="tab-desktop">桌面版</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="shots-phone" id="tab-phone">手机版</button>
+    </div>
+
+    <div class="shots-panel" id="shots-desktop" role="tabpanel" aria-labelledby="tab-desktop">
+      <div class="shots-grid desktop">
+        <figure class="shot reveal">
+          <img src="site/img/desktop-quad.webp"
+               srcset="site/img/desktop-quad.webp 1441w, site/img/desktop-quad@2x.webp 2882w"
+               sizes="(max-width: 760px) 94vw, 1092px"
+               width="1441" height="981" loading="lazy" decoding="async"
+               alt="桌面版主界面：输入系数后显示图像与结论">
+          <figcaption class="shot-cap">
+            <b>主界面</b>
+            <span>左边填系数，右边出图像与结论。顶点、对称轴、值域全部是精确值。</span>
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal">
+          <img src="site/img/desktop-quad-report.webp"
+               srcset="site/img/desktop-quad-report.webp 1441w, site/img/desktop-quad-report@2x.webp 2882w"
+               sizes="(max-width: 760px) 94vw, 1092px"
+               width="1441" height="981" loading="lazy" decoding="async"
+               alt="桌面版报告区：三种形式互化，含根号的交点式">
+          <figcaption class="shot-cap">
+            <b>三种形式互化</b>
+            <span>交点式里的 <code>√3</code> 是算出来的精确根，不是四舍五入的结果。</span>
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal">
+          <img src="site/img/desktop-interval.webp"
+               srcset="site/img/desktop-interval.webp 1441w, site/img/desktop-interval@2x.webp 2882w"
+               sizes="(max-width: 760px) 94vw, 1092px"
+               width="1441" height="981" loading="lazy" decoding="async"
+               alt="桌面版区间最值：在定义域内标出最大值与最小值">
+          <figcaption class="shot-cap">
+            <b>区间最值</b>
+            <span>自定义定义域后，图像只画区间内的部分，最大值、最小值分别标出。</span>
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal">
+          <img src="site/img/desktop-trig.webp"
+               srcset="site/img/desktop-trig.webp 1441w, site/img/desktop-trig@2x.webp 2882w"
+               sizes="(max-width: 760px) 94vw, 1092px"
+               width="1441" height="981" loading="lazy" decoding="async"
+               alt="桌面版三角函数工作区">
+          <figcaption class="shot-cap">
+            <b>三角函数工作区</b>
+            <span>解直角三角形、由函数值反推角度，特殊角照旧给精确值。</span>
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <div class="shots-panel" id="shots-phone" role="tabpanel" aria-labelledby="tab-phone" hidden>
+      <div class="shots-grid phone">
+        <figure class="shot reveal">
+          <img src="site/img/phone-quad.webp"
+               srcset="site/img/phone-quad.webp 391w, site/img/phone-quad@2x.webp 782w"
+               sizes="(max-width: 480px) 45vw, 300px"
+               width="391" height="845" loading="lazy" decoding="async"
+               alt="手机版二次函数界面">
+          <figcaption class="shot-cap"><b>手机版</b><span>单列排版，一路往下滑。</span></figcaption>
+        </figure>
+        <figure class="shot reveal" data-d="1">
+          <img src="site/img/phone-report.webp"
+               srcset="site/img/phone-report.webp 391w, site/img/phone-report@2x.webp 782w"
+               sizes="(max-width: 480px) 45vw, 300px"
+               width="391" height="845" loading="lazy" decoding="async"
+               alt="手机版报告区">
+          <figcaption class="shot-cap"><b>手机看报告</b><span>结论速览照样一眼看到底。</span></figcaption>
+        </figure>
+        <figure class="shot reveal" data-d="2">
+          <img src="site/img/phone-trig.webp"
+               srcset="site/img/phone-trig.webp 391w, site/img/phone-trig@2x.webp 782w"
+               sizes="(max-width: 480px) 45vw, 300px"
+               width="391" height="845" loading="lazy" decoding="async"
+               alt="手机版三角函数工作区">
+          <figcaption class="shot-cap"><b>手机三角函数</b><span>数学键盘点一下就能写 √。</span></figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 下载 ===================== -->
+<section class="section download" id="download">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">Download</span>
+      <h2>下载</h2>
+      <p class="section-sub">
+        点一下就开始下载，不用注册、不用登录。版本号与文件大小直接从 GitHub Releases 读取，
+        所以这里显示的永远是最新版。
+      </p>
+    </div>
+
+    <div class="rel-bar reveal" data-rel-bar>
+      <span>最新版本</span>
+      <span class="ver" data-rel-ver>读取中…</span>
+      <span data-rel-when></span>
+      <span class="spacer"></span>
+      <a data-rel-link href="https://github.com/piaochongdeng/quadratic-exact-lab/releases" target="_blank" rel="noopener">全部版本与更新日志 →</a>
+    </div>
+    <p class="rel-status" data-rel-status></p>
+    <p class="rel-status" data-dl-platform-note style="margin-bottom:22px"></p>
+
+    <div class="dl-grid">
+
+      <article class="dl-card reveal" data-dl="android">
+        <div class="dl-os">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="color:var(--d-green)" aria-hidden="true"><path d="M6 9.2h12v8.3a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 17.5V9.2Zm-2.2.4a1.25 1.25 0 0 1 2.5 0v5.6a1.25 1.25 0 0 1-2.5 0v-5.6Zm13.9 0a1.25 1.25 0 0 1 2.5 0v5.6a1.25 1.25 0 0 1-2.5 0v-5.6ZM8.35 3.3l-.75-1.3a.38.38 0 1 1 .66-.38l.8 1.37A6.1 6.1 0 0 1 12 2.4c1.06 0 2.05.25 2.94.59l.8-1.37a.38.38 0 1 1 .66.38l-.75 1.3a5.7 5.7 0 0 1 2.5 4.2H5.85a5.7 5.7 0 0 1 2.5-4.2ZM9.4 5.6a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Zm5.2 0a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4ZM8.2 19.6h1.9v2.1a.95.95 0 1 1-1.9 0v-2.1Zm5.7 0h1.9v2.1a.95.95 0 1 1-1.9 0v-2.1Z"/></svg>
+          <div><b>Android</b><span>手机 / 平板 · APK</span></div>
+        </div>
+        <p class="dl-desc">
+          适配 Android 7.0 及以上。安装包<strong>不申请任何权限</strong>，连联网权限都没有。
+        </p>
+        <div class="dl-file" data-dl-name></div>
+        <div class="dl-facts" data-dl-facts></div>
+        <a class="btn btn-on-dark btn-block is-loading" data-dl-btn href="#download" rel="noopener">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 19h16"/></svg>
+          下载 APK
+        </a>
+        <details class="dl-hash" data-dl-hash hidden>
+          <summary>校验值 SHA-256</summary>
+          <code></code>
+        </details>
+      </article>
+
+      <article class="dl-card reveal" data-d="1" data-dl="win-setup">
+        <div class="dl-os">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--d-accent)" aria-hidden="true"><path d="M3 5.6 10.4 4.5v7H3v-5.9Zm0 12.8 7.4 1.1v-6.9H3v5.8Zm8.5 1.2L21 21v-8.5h-9.5v7.1ZM11.5 4.4 21 3.2v8.3h-9.5V4.4Z"/></svg>
+          <div><b>Windows 安装包</b><span>推荐 · 64 位</span></div>
+        </div>
+        <p class="dl-desc">
+          一路下一步装完即用，自动建桌面快捷方式，以后可以在应用内检查更新。
+        </p>
+        <div class="dl-file" data-dl-name></div>
+        <div class="dl-facts" data-dl-facts></div>
+        <a class="btn btn-on-dark btn-block is-loading" data-dl-btn href="#download" rel="noopener">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 19h16"/></svg>
+          下载安装包
+        </a>
+        <details class="dl-hash" data-dl-hash hidden>
+          <summary>校验值 SHA-256</summary>
+          <code></code>
+        </details>
+      </article>
+
+      <article class="dl-card reveal" data-d="2" data-dl="win-zip">
+        <div class="dl-os">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--d-ink-faint)" aria-hidden="true"><path d="M3 5.6 10.4 4.5v7H3v-5.9Zm0 12.8 7.4 1.1v-6.9H3v5.8Zm8.5 1.2L21 21v-8.5h-9.5v7.1ZM11.5 4.4 21 3.2v8.3h-9.5V4.4Z"/></svg>
+          <div><b>Windows 免安装</b><span>便携版 · ZIP</span></div>
+        </div>
+        <p class="dl-desc">
+          解压到任意目录直接运行，不写注册表。适合放 U 盘，或没有管理员权限的电脑。
+        </p>
+        <div class="dl-file" data-dl-name></div>
+        <div class="dl-facts" data-dl-facts></div>
+        <a class="btn btn-on-dark btn-block is-loading" data-dl-btn href="#download" rel="noopener">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 19h16"/></svg>
+          下载 ZIP
+        </a>
+        <details class="dl-hash" data-dl-hash hidden>
+          <summary>校验值 SHA-256</summary>
+          <code></code>
+        </details>
+      </article>
+
+    </div>
+
+    <div class="dl-foot">
+      <span>Windows 版首次运行若被 SmartScreen 拦下，点「更多信息 → 仍要运行」即可；安装包未做代码签名。</span>
+      <span class="spacer"></span>
+      <a href="https://github.com/piaochongdeng/quadratic-exact-lab/releases" target="_blank" rel="noopener">在 GitHub 上查看全部文件 →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 在线试用 ===================== -->
+<section class="section tight" id="try">
+  <div class="wrap">
+    <div class="try reveal">
+      <div>
+        <h3>不想装？直接在浏览器里用</h3>
+        <p>
+          在线版和下载版是同一套代码，功能完全一致，计算同样精确。
+          页面加载完就能用，数据不出本机。
+        </p>
+        <p class="try-note">
+          在线版需要联网加载一次；下载版装好后永久离线可用，且不申请网络权限。
+        </p>
+      </div>
+      <a class="btn btn-primary btn-lg" href="app/">
+        打开在线版
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 已知边界 ===================== -->
+<section class="section tight" id="limits">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">Limits</span>
+      <h2>先说清楚它算不了什么</h2>
+      <p class="section-sub">
+        一个工具的可信度，一半来自它敢承认的边界。下面这些情况它<strong>不会</strong>糊弄你。
+      </p>
+    </div>
+
+    <div class="limits">
+      <div class="limit reveal">
+        <h4><span class="n">01</span>去不掉的双层根号</h4>
+        <p>
+          像 <code>√(1+√2)</code> 这种，数学上本来就写不成有限个根号相加的形式。
+          它会直接报「不能写成有限根式」，而不是给你一个假装精确的小数。
+        </p>
+      </div>
+      <div class="limit reveal" data-d="1">
+        <h4><span class="n">02</span>三角函数非特殊角</h4>
+        <p>
+          <code>sin 37°</code> 没有有限的根式表达。这时按你设定的位数给近似值，
+          并且会明确标注「近似」，不会混在精确值里。
+        </p>
+      </div>
+      <div class="limit reveal">
+        <h4><span class="n">03</span>只管二次函数</h4>
+        <p>
+          三次及以上方程、无理方程不在范围内。这是刻意的：只把二次函数这一件事做到没有浮点误差。
+        </p>
+      </div>
+      <div class="limit reveal" data-d="1">
+        <h4><span class="n">04</span>不做云端同步</h4>
+        <p>
+          没有账号系统，也就没有上传。安卓版连联网权限都没申请，装了之后它想联网也联不上。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ===================== 页脚 ===================== -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div>
+        <div class="brand">
+          <span class="brand-mark">x²</span>
+          <span class="brand-name">二次函数精确解析器<small>Quadratic Exact Lab</small></span>
+        </div>
+        <p class="footer-about">
+          纯原创实现，零第三方依赖，浏览器与 Node.js 通用。
+          计算结果全部基于有理数与二次根式的精确运算，不含浮点误差。
+        </p>
+      </div>
+      <div>
+        <h4>下载</h4>
+        <ul>
+          <li><a href="#download">Android APK</a></li>
+          <li><a href="#download">Windows 安装包</a></li>
+          <li><a href="#download">Windows 免安装</a></li>
+          <li><a href="app/">在线试用</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>相关</h4>
+        <ul>
+          <li><a href="https://github.com/piaochongdeng/quadratic-exact-lab" target="_blank" rel="noopener">GitHub 仓库</a></li>
+          <li><a href="https://github.com/piaochongdeng/quadratic-exact-lab/releases" target="_blank" rel="noopener">更新日志</a></li>
+          <li><a href="https://github.com/piaochongdeng/quadratic-exact-lab/issues" target="_blank" rel="noopener">问题反馈</a></li>
+          <li><a href="USAGE.md">使用说明</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© <span data-year>2025</span> quadratic-exact-lab</span>
+      <span class="spacer"></span>
+      <span>版本数据来自 GitHub Releases，随每次发布自动更新</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app/vendor/katex/katex.min.js"></script>
+<script src="site/site.js"></script>
+</body>
+</html>

@@ -117,6 +117,34 @@ cd android && ./gradlew assembleRelease   # 正式包（需要 android/keystore.
 
 细节、取舍与踩坑见 [`docs/ANDROID.md`](docs/ANDROID.md)。
 
+### 官网
+
+<https://piaochongdeng.github.io/quadratic-exact-lab/>
+
+官网是纯静态页，源码就在本仓库的 `docs/` 目录（GitHub Pages 的发布源），
+和在线试用版共用同一套 KaTeX 与配图，不额外引第三方库。
+
+**下载区的版本号不是写死的**：页面加载时先读 GitHub Releases API 拿最新发布，
+拿到什么就显示什么，所以以后发新版，官网自动跟着变，不用改任何文件。
+API 不通（限流 / 断网）时退回同目录的 `site/releases.json`（打包时的快照）并明确提示。
+
+重新构建官网：
+
+```bash
+node scripts/make-www.js                                   # 生成在线试用版到 www/
+node_modules/electron/dist/electron.exe scripts/make-screenshots.js   # 拍应用界面截图（深/浅两套）
+py scripts/optimize-screens.py                             # 转 WebP，并裁出首屏特写
+node scripts/make-site.js                                  # 组装 docs/、抓最新发布写 releases.json
+```
+
+改完页面想核对效果，可以再拍一组官网自身的截图（会起一个临时 HTTP 服务，
+因为 `file://` 下 `fetch` 会被拦掉，下载区会一直停在「读取中…」）：
+
+```bash
+node_modules/electron/dist/electron.exe scripts/make-site-shots.js
+# 输出 docs/site/shots/*.png
+```
+
 ### 镜像仓库（Gitee）
 
 GitHub 访问不畅时，可用仓库内的一键脚本同步到 Gitee：
@@ -184,6 +212,10 @@ quadratic-exact-lab/
 │  ├─ make-www.js      从仓库挑出运行时文件生成 www/（会兜底检查有没有混进 desktop/、node_modules/）
 │  ├─ make-help.js     把 docs/USAGE.md 打包成 help.js（应用内「使用说明」与仓库文档同源）
 │  ├─ make-android-icons.py  由 desktop/icon.png 派生全套 Android 图标
+│  ├─ make-site.js     组装官网发布目录 docs/（拷在线试用页、校验配图、抓最新发布写 releases.json）
+│  ├─ make-screenshots.js    用 Electron 拍应用界面截图（2 倍像素，深/浅两套主题）
+│  ├─ make-site-shots.js     拍官网页面本身，用于人工/视觉复核
+│  ├─ optimize-screens.py    截图转 WebP（1x / @2x），并裁出首屏特写
 │  └─ push-gitee.ps1   一键同步到 Gitee 镜像
 ├─ www/                ↑ 由 make-www.js 生成的 Android assets（gitignore）
 ├─ desktop/            桌面应用外壳
@@ -195,7 +227,12 @@ quadratic-exact-lab/
 │  ├─ icon.ico         应用图标（多尺寸）
 │  └─ smoke*.js        端到端冒烟测试（含 smoke-mobile.js 的手机尺寸布局回归）
 ├─ vendor/katex/       随包携带的 KaTeX（离线数学排版）
-├─ docs/               预览截图、使用说明（USAGE.md）与 Android 版说明
+├─ docs/               官网发布目录（GitHub Pages 的发布源）+ 使用说明
+│  ├─ index.html       官网首页
+│  ├─ site/            官网自己的样式、脚本、配图（site.js / site.css / img/ / shots/）
+│  ├─ app/             ↑ 由 make-site.js 从 www/ 拷来的在线试用版
+│  ├─ releases.json    ↑ 打包时的最新发布快照（断网兜底，页面正常时读 GitHub API）
+│  └─ USAGE.md         应用内使用说明的源文档
 └─ tests/              自测脚本（Node.js 运行）
 ```
 
@@ -238,6 +275,9 @@ node tests/help.test.js        # 使用说明 14 项：help.js 与 docs/USAGE.md
                                #   两块数学键盘的键位逐一对齐、
                                #   说明里承诺的键盘 / 设置 / 快捷键 / 报错文案都真实存在
 node tests/dom-check.js        # 页面与脚本的 id 引用一致性
+node tests/site.test.js        # 官网 12 项：发布目录完整性、首页所有本地引用都能在磁盘上找到、
+                               #   下载区没写死版本号（以后发版自动跟着变）、手机与电脑两个入口都在、
+                               #   KaTeX 不引用不存在的 auto-render、在线试用页带 noindex
 node tests/desktop.test.js     # 桌面版端到端 48 项（需先 npm install；未装 Electron 会自动跳过）
                                #   含数学键盘、设置面板、使用说明弹窗、三角函数根号输入，
                                #   以及手机尺寸布局回归：390×844 / 320×640 下的吸顶重叠、触控目标、
