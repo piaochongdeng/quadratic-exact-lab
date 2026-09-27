@@ -1,0 +1,16 @@
+[Unit]
+Description=每天同步一次安装包镜像
+
+[Timer]
+# 每天 04:30 跑。随机延迟 30 分钟，避免和别的定时任务撞在一起。
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=1800
+
+# 关机期间错过了就开机后补跑一次 —— 否则一台周末重启过的机器
+# 可能连着好几天没同步，官网却一直显示「本站镜像」。
+Persistent=true
+
+Unit=qel-mirror.service
+
+[Install]
+WantedBy=timers.target

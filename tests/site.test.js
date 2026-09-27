@@ -221,5 +221,91 @@ t('部署脚本保留了「从 git 导出 / 换行符 / 未提交改动」三道
     '缺少未提交改动的拦截（不拦就会出现「以为更新了其实没有」）');
 });
 
+/* 安装包镜像。这里的每一条都对应一个具体的坑：
+   - 不在镜像站上却去取 dl-mirror.json：GitHub Pages 上没有这个文件，
+     白白多一次 404 请求。
+   - 不比对版本就用镜像地址：刚发新版、镜像还没同步时，按钮会指向
+     一个不存在的文件，用户点了直接 404 —— 比慢更糟。
+   - 镜像目录混进站点目录：站点是「整份替换」部署的，217MB 的安装包
+     会跟着被删掉，而且会一起提交进 git 和 Pages。 */
+t('镜像只在自己的服务器上启用（GitHub Pages 上没有 dl/ 目录）', () => {
+  const m = siteJs.match(/var MIRROR_HOSTS\s*=\s*\[([^\]]*)\]/);
+  assert(m, 'site.js 里找不到 MIRROR_HOSTS');
+  assert(/'43\.155\.128\.66'/.test(m[1]),
+    'MIRROR_HOSTS 里没有服务器 IP，镜像等于没接上');
+  assert(/function onMirrorHost\(\)[\s\S]{0,200}indexOf\(location\.hostname\)/.test(siteJs),
+    'onMirrorHost() 不是按 location.hostname 判断的');
+  assert(/function loadMirror\(\)\s*\{[\s\S]{0,200}!onMirrorHost\(\)\)\s*return Promise\.resolve\(null\)/.test(siteJs),
+    'loadMirror() 没有先判断是不是在镜像站上 —— 在 GitHub Pages 上会多一次必然 404 的请求');
+});
+
+t('镜像地址要版本对得上才用，否则退回 GitHub 链接', () => {
+  const fn = siteJs.match(/function mirrorUrl\(asset, release\)\s*\{[\s\S]*?\n  \}/);
+  assert(fn, 'site.js 里找不到 mirrorUrl()');
+  assert(/mirror\.tag\s*!==\s*release\.tag/.test(fn[0]),
+    'mirrorUrl() 没有比对版本号 —— 刚发新版、镜像还没同步时，' +
+    '按钮会指向不存在的文件，用户点了直接 404');
+  assert(/mirror\.assets\[asset\.name\]/.test(fn[0]),
+    'mirrorUrl() 没有检查清单里到底有没有这个文件名');
+  assert(/btn\.href\s*=\s*localUrl\s*\|\|\s*asset\.url/.test(siteJs),
+    '下载按钮没有在「有镜像用镜像、没有退回 GitHub」之间做选择');
+});
+
+t('镜像同步脚本：先校验后改名，失败不清理旧版本', () => {
+  const p = path.join(ROOT, 'scripts', 'mirror-releases.sh');
+  assert(fs.existsSync(p), '找不到 scripts/mirror-releases.sh');
+  const code = fs.readFileSync(p, 'utf8')
+    .split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+  /* 下到 .part 再改名：中途断了不会留下一个「看着存在、其实是半截」的安装包，
+     而官网正是靠「文件在不在」决定要不要用镜像地址。 */
+  assert(/curl[^\n]*-o "\$FILE\.part"/.test(code),
+    '不是先下到 .part —— 下载中断会留下半截文件，官网会把它当成完整安装包');
+  assert(/sha256sum "\$FILE\.part"/.test(code),
+    '改名之前没有校验 sha256');
+  assert(/mv -f "\$FILE\.part" "\$FILE"/.test(code),
+    '缺少 .part 改名到正式文件这一步');
+  /* API 挂了/某个文件没下成，就不能动旧版本，否则镜像会变成空的 */
+  assert(/if \[ "\$FAILED" = "0" \]; then[\s\S]{0,600}?find "\$DEST"/.test(code),
+    '清理旧版本没有以「本次全部成功」为前提 —— 拉取失败时会把还能用的旧文件删掉');
+  /* 两个实例同时跑会写同一个 .part 文件 */
+  assert(/flock -n 9/.test(code),
+    '没有加锁 —— 手动触发撞上定时任务时，两边会同时写同一个 .part 文件');
+  /* 清单只列校验通过的文件，所以必须在下载之后写 */
+  const iDl = code.indexOf('mv -f "$FILE.part" "$FILE"');
+  const iManifest = code.indexOf('dl-mirror.json.tmp');
+  assert(iDl > 0 && iManifest > iDl,
+    '清单在文件就位之前就写了 —— 页面会拿到一个指向不存在文件的地址');
+});
+
+t('Caddy 把镜像目录单独挂出来，且不混进站点目录', () => {
+  const p = path.join(ROOT, 'scripts', 'server', 'Caddyfile');
+  assert(fs.existsSync(p), '找不到 scripts/server/Caddyfile（服务器配置的母本）');
+  const conf = fs.readFileSync(p, 'utf8');
+
+  assert(/handle_path \/dl\/\*/.test(conf), 'Caddyfile 里没有 /dl/* 的处理规则');
+  assert(/root \* \/srv\/qel-downloads/.test(conf),
+    '/dl/* 没有指向独立的镜像目录 —— 混进站点目录的话，' +
+    '下次整份替换部署会把这 217MB 一起删掉');
+  assert(/handle \/dl-mirror\.json[\s\S]{0,300}?Cache-Control "no-cache"/.test(conf),
+    '镜像清单没有设成不缓存 —— 缓存住会出现「文件同步好了，页面还指着 GitHub」');
+  /* 安装包文件名带版本号，内容不会变，可以长期缓存 */
+  assert(/handle_path \/dl\/\*[\s\S]{0,300}?immutable/.test(conf),
+    '安装包没有长期缓存，重复下载会白白再走一遍网络');
+});
+
+t('部署脚本会把镜像脚本装到服务器并核对版本', () => {
+  const code = fs.readFileSync(path.join(ROOT, 'scripts', 'deploy-site.sh'), 'utf8')
+    .split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  assert(/--setup/.test(code), 'deploy-site.sh 没有 --setup');
+  assert(/qel-mirror-releases\.sh/.test(code), '--setup 没有安装镜像脚本');
+  assert(/qel-mirror\.timer/.test(code), '--setup 没有装定时器');
+  /* 光看清单不够：清单对了，文件也可能没有读权限 */
+  assert(/dl\/\$F/.test(code) || /"\$URL\/dl\/\$F"/.test(code),
+    '部署后没有真的去取一次镜像文件 —— 清单存在不等于文件能被下载');
+  assert(/"\$TAG" = "\$MTAG"/.test(code),
+    '部署后没有核对镜像版本与最新发布是否一致');
+});
+
 console.log('\n  通过 ' + pass + ' 项，失败 ' + fail + ' 项');
 process.exit(fail ? 1 : 0);

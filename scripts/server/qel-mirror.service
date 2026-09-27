@@ -1,0 +1,23 @@
+[Unit]
+Description=同步二次函数精确解析器的安装包镜像（从 GitHub Releases）
+Documentation=https://github.com/piaochongdeng/quadratic-exact-lab
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/qel-mirror-releases.sh
+
+# 日志进 journal（journalctl -u qel-mirror），同时留一份文件方便直接看
+StandardOutput=append:/var/log/qel-mirror.log
+StandardError=append:/var/log/qel-mirror.log
+
+# 下载 217MB 偶尔会慢，给足时间；超过就判失败，下次定时再补
+TimeoutStartSec=3600
+
+# 只允许写镜像目录、日志和 /run（flock 用），其余一律只读。
+# 这个服务只是下载文件，不该有更大的权限。
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/qel-downloads /var/log /run

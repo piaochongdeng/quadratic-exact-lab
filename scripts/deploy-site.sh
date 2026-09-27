@@ -11,12 +11,19 @@
 # 用法：
 #   bash scripts/deploy-site.sh              # 部署已提交的内容
 #   bash scripts/deploy-site.sh --build      # 先重新生成 docs/ 再部署（需先提交）
+#   bash scripts/deploy-site.sh --setup      # 首次 / 机器重建：装 Caddy 配置、镜像脚本、定时器、BBR
+#   bash scripts/deploy-site.sh --mirror     # 只同步安装包镜像（不部署页面）
+#
+# --setup 可以重复执行。它把 scripts/server/ 下的配置推上去并重启相关服务；
+# 服务器上那份只是副本，母本在仓库里 —— 否则机器一重建，
+# 没人知道 Caddyfile 原本该写什么。
 #
 # 可用环境变量覆盖（都有默认值）：
-#   SITE_HOST  默认 ubuntu@43.155.128.66
-#   SITE_KEY   默认 ~/.ssh/dsh_ed25519
-#   SITE_DIR   默认 /srv/quadratic-exact-lab
-#   SITE_URL   默认 http://43.155.128.66/
+#   SITE_HOST   默认 ubuntu@43.155.128.66
+#   SITE_KEY    默认 ~/.ssh/dsh_ed25519
+#   SITE_DIR    默认 /srv/quadratic-exact-lab
+#   SITE_URL    默认 http://43.155.128.66/
+#   SITE_DL_DIR 默认 /srv/qel-downloads
 #
 set -euo pipefail
 
@@ -24,6 +31,7 @@ HOST="${SITE_HOST:-ubuntu@43.155.128.66}"
 KEY="${SITE_KEY:-$HOME/.ssh/dsh_ed25519}"
 DIR="${SITE_DIR:-/srv/quadratic-exact-lab}"
 URL="${SITE_URL:-http://43.155.128.66/}"
+DL_DIR="${SITE_DL_DIR:-/srv/qel-downloads}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 TARBALL="$(mktemp -t qel-docs-XXXXXX.tar.gz)"
 
@@ -45,6 +53,67 @@ if ! "${SSH[@]}" true 2>/dev/null; then
   exit 1
 fi
 echo "    ssh 连通 ✓"
+
+# ---------- 1b. 一次性服务器配置 ----------
+if [ "${1:-}" = "--setup" ]; then
+  echo "==> 安装服务器配置（母本在 scripts/server/）"
+  for f in Caddyfile qel-mirror.service qel-mirror.timer 99-qel-bbr.conf qel-bbr-modules.conf; do
+    [ -f "scripts/server/$f" ] || { echo "× 缺少 scripts/server/$f"; exit 1; }
+  done
+
+  "${SCP[@]}" scripts/server/Caddyfile            "$HOST:/tmp/qel-Caddyfile"
+  "${SCP[@]}" scripts/server/qel-mirror.service   "$HOST:/tmp/qel-mirror.service"
+  "${SCP[@]}" scripts/server/qel-mirror.timer     "$HOST:/tmp/qel-mirror.timer"
+  "${SCP[@]}" scripts/server/99-qel-bbr.conf      "$HOST:/tmp/qel-99-bbr.conf"
+  "${SCP[@]}" scripts/server/qel-bbr-modules.conf "$HOST:/tmp/qel-bbr-modules.conf"
+  "${SCP[@]}" scripts/mirror-releases.sh          "$HOST:/tmp/qel-mirror-releases.sh"
+
+  "${SSH[@]}" "set -e
+    # Caddy 配置：先备份，校验通过才生效，校验不过自动回滚，
+    # 免得一个手误把正在跑的站点改挂。
+    sudo -n cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak.$STAMP 2>/dev/null || true
+    sudo -n install -m 644 -o root -g root /tmp/qel-Caddyfile /etc/caddy/Caddyfile
+    if ! sudo -n caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+      echo '× Caddyfile 校验没过，已回滚'
+      sudo -n cp /etc/caddy/Caddyfile.bak.$STAMP /etc/caddy/Caddyfile
+      exit 1
+    fi
+    sudo -n systemctl reload caddy
+
+    # 镜像同步脚本 + 每日定时器
+    sudo -n install -m 755 -o root -g root /tmp/qel-mirror-releases.sh /usr/local/bin/qel-mirror-releases.sh
+    sudo -n mkdir -p $DL_DIR
+    sudo -n chown root:root $DL_DIR
+    sudo -n install -m 644 -o root -g root /tmp/qel-mirror.service /etc/systemd/system/qel-mirror.service
+    sudo -n install -m 644 -o root -g root /tmp/qel-mirror.timer   /etc/systemd/system/qel-mirror.timer
+    sudo -n touch /var/log/qel-mirror.log
+    sudo -n systemctl daemon-reload
+    sudo -n systemctl enable --now qel-mirror.timer >/dev/null 2>&1
+
+    # BBR：跨境链路提速。实测安装包下载从 60 KB/s 提到约 2.5 MB/s。
+    sudo -n install -m 644 -o root -g root /tmp/qel-99-bbr.conf /etc/sysctl.d/99-qel-bbr.conf
+    sudo -n install -m 644 -o root -g root /tmp/qel-bbr-modules.conf /etc/modules-load.d/qel-bbr.conf
+    sudo -n modprobe tcp_bbr 2>/dev/null || true
+    sudo -n systemctl restart systemd-sysctl
+
+    rm -f /tmp/qel-Caddyfile /tmp/qel-mirror.service /tmp/qel-mirror.timer \
+          /tmp/qel-99-bbr.conf /tmp/qel-bbr-modules.conf /tmp/qel-mirror-releases.sh
+
+    printf '    caddy=%s  定时器=%s  BBR=%s\n' \
+      \"\$(systemctl is-active caddy)\" \
+      \"\$(systemctl is-active qel-mirror.timer)\" \
+      \"\$(sysctl -n net.ipv4.tcp_congestion_control)\""
+
+  echo "==> 首次同步安装包镜像（约 217MB，半分钟左右）"
+  "${SSH[@]}" "sudo -n systemctl start qel-mirror.service; sudo -n tail -3 /var/log/qel-mirror.log"
+fi
+
+# ---------- 1c. 只同步镜像 ----------
+if [ "${1:-}" = "--mirror" ]; then
+  echo "==> 同步安装包镜像"
+  "${SSH[@]}" "sudo -n systemctl start qel-mirror.service; sudo -n tail -12 /var/log/qel-mirror.log"
+  exit 0
+fi
 
 # ---------- 2. 可选：重新生成 docs/ ----------
 if [ "${1:-}" = "--build" ]; then
@@ -117,7 +186,43 @@ if [ "$BAD" != "0" ]; then
 fi
 echo "    $OK 个文件逐字节一致 ✓"
 
-# ---------- 8. 对外可访问性 ----------
+# ---------- 8. 安装包镜像 ----------
+# 页面本身很小、加载很快，用户真正等的是安装包。这里顺手把镜像同步一次
+# （幂等，已经是最新版就 0.5 秒跳过），免得「页面更新了、安装包还指着 GitHub」。
+echo "==> 同步安装包镜像"
+if "${SSH[@]}" "test -x /usr/local/bin/qel-mirror-releases.sh"; then
+  "${SSH[@]}" "sudo -n systemctl start qel-mirror.service; sudo -n tail -4 /var/log/qel-mirror.log" \
+    | sed 's/^/    /'
+
+  # 清单里的 tag 必须等于最新发布，否则页面会退回 GitHub 链接 ——
+  # 那样也不至于出错，但等于镜像白做了，得让人看见。
+  TAG="$(curl -s -m 20 -H 'Accept: application/vnd.github+json' \
+         "https://api.github.com/repos/piaochongdeng/quadratic-exact-lab/releases/latest" \
+         | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  MTAG="$(curl -s -m 20 "$URL/dl-mirror.json" | sed -n 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  if [ -n "$TAG" ] && [ "$TAG" = "$MTAG" ]; then
+    echo "    镜像版本 $MTAG 与最新发布一致 ✓"
+  else
+    echo "    ! 最新发布是 $TAG，镜像清单是 $MTAG —— 页面会退回 GitHub 链接"
+  fi
+
+  # 真下 1 字节，确认镜像文件对外能取到（只看清单不够，清单对了文件也可能没权限）
+  for a in apk exe zip; do
+    F=$(curl -s -m 20 "$URL/dl-mirror.json" \
+        | tr ',' '\n' | sed -n "s/.*\"\([^\"]*\.$a\)\".*/\1/p" | head -1)
+    [ -n "$F" ] || continue
+    C=$(curl -s -m 20 -r 0-0 -o /dev/null -w '%{http_code}' "$URL/dl/$F")
+    if [ "$C" = "200" ] || [ "$C" = "206" ]; then
+      echo "    $F 可下载 ✓"
+    else
+      echo "    ! $F 取不到（HTTP $C）"
+    fi
+  done
+else
+  echo "    跳过：服务器上还没装镜像脚本，跑一次 bash scripts/deploy-site.sh --setup"
+fi
+
+# ---------- 9. 对外可访问性 ----------
 echo "==> 从外网访问 $URL"
 CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "$URL" || echo "000")
 if [ "$CODE" = "200" ]; then

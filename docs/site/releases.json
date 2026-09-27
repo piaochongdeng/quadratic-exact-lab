@@ -7,21 +7,21 @@
     {
       "name": "quadratic-exact-lab-1.4.1-release.apk",
       "size": 704553,
-      "count": 3,
+      "count": 4,
       "url": "https://github.com/piaochongdeng/quadratic-exact-lab/releases/download/v1.4.1/quadratic-exact-lab-1.4.1-release.apk",
       "sha256": "706d54953209faf97353f058c057cbd51bcc4469f6791b680e3ef5862b073155"
     },
     {
       "name": "quadratic-exact-lab-1.4.1-setup-x64.exe",
       "size": 94334097,
-      "count": 0,
+      "count": 5,
       "url": "https://github.com/piaochongdeng/quadratic-exact-lab/releases/download/v1.4.1/quadratic-exact-lab-1.4.1-setup-x64.exe",
       "sha256": "400216e5c91b30e82a0ba2f71795e442dc9ddecdc4f653887d554b237316e57d"
     },
     {
       "name": "quadratic-exact-lab-1.4.1-x64.zip",
       "size": 132384783,
-      "count": 0,
+      "count": 1,
       "url": "https://github.com/piaochongdeng/quadratic-exact-lab/releases/download/v1.4.1/quadratic-exact-lab-1.4.1-x64.zip",
       "sha256": "d4d4fb15469c81ae91dd3069d175f3ba8e0d5cc772171965dccefddf87c2363c"
     }

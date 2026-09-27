@@ -15,6 +15,45 @@
   var FALLBACK = 'site/releases.json';
   var RELEASES_PAGE = 'https://github.com/' + REPO + '/releases';
 
+  /* ===================== 安装包镜像 =====================
+     官网同时挂在两个地方：GitHub Pages 和自有服务器。安装包本体一直托管在
+     GitHub（release-assets.githubusercontent.com），国内下载实测只有 19 KB/s，
+     90MB 的 EXE 要一个多小时。自有服务器上有一份镜像（由
+     scripts/mirror-releases.sh 每天从 GitHub 同步），同一条线路实测中位数
+     约 2.5 MB/s。
+
+     只在镜像站上才用它：GitHub Pages 那份页面的同源目录里没有 dl/，
+     指过去必然 404。判断方式是看当前域名。
+
+     清单 dl-mirror.json 由镜像脚本在文件校验通过之后才写，所以
+     「清单里有这个名字」就等于「本地确实有一份完整且哈希正确的文件」。
+     版本对不上（刚发了新版、镜像还没同步）就退回 GitHub 链接 ——
+     宁可用慢的，也不给一个点了 404 的按钮。 */
+  var MIRROR_HOSTS = ['43.155.128.66'];
+  var MIRROR_MANIFEST = 'dl-mirror.json';
+  var MIRROR_PREFIX = '/dl/';
+
+  var mirror = null;   /* 镜像清单；不在镜像站上时保持 null */
+
+  function onMirrorHost() {
+    return MIRROR_HOSTS.indexOf(location.hostname) >= 0;
+  }
+
+  function loadMirror() {
+    if (!onMirrorHost()) return Promise.resolve(null);
+    return fetch(MIRROR_MANIFEST, { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+
+  /* 这个文件在本地镜像里有吗？有就返回本地地址，没有返回 null */
+  function mirrorUrl(asset, release) {
+    if (!mirror || !mirror.assets || !release) return null;
+    if (mirror.tag !== release.tag) return null;      /* 镜像还是上一版 */
+    if (!mirror.assets[asset.name]) return null;
+    return MIRROR_PREFIX + encodeURIComponent(asset.name);
+  }
+
   /* ===================== 小工具 ===================== */
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -110,10 +149,15 @@
       /* 不显示下载次数：新项目基本都是 0～个位数，摆出来既不好看，
          又会让「有次数的那张卡多一行」把三张卡的高度撑得参差不齐。
          真要看得去 GitHub Releases 看，那里更权威。 */
+      var local = mirrorUrl(asset, release);
       var rows = [
         ['版本', release.tag],
         ['大小', fmtSize(asset.size)],
-        ['日期', fmtDate(release.date)]
+        ['日期', fmtDate(release.date)],
+        /* 三张卡都显示这一行，高度保持一致。
+           写明来源是有用的：镜像站上点下载走本地直连（实测中位数 2.5 MB/s），
+           退回 GitHub 时国内可能要等一个多小时，用户有权知道自己在等什么。 */
+        ['来源', local ? '本站镜像' : 'GitHub']
       ];
       rows.forEach(function (r) {
         if (!r[1]) return;
@@ -135,13 +179,16 @@
     }
 
     if (btn) {
-      btn.href = asset.url;
+      var localUrl = mirrorUrl(asset, release);
+      btn.href = localUrl || asset.url;
       btn.classList.remove('is-loading');
       btn.removeAttribute('aria-disabled');
       btn.setAttribute('download', '');
       btn.setAttribute('rel', 'noopener');
       // 带上下载地址里的文件名，便于用户确认下到的是什么
-      btn.title = '下载 ' + asset.name;
+      btn.title = localUrl
+        ? '下载 ' + asset.name + '（本站镜像，国内直连）'
+        : '下载 ' + asset.name + '（来自 GitHub）';
     }
   }
 
@@ -172,16 +219,35 @@
     ];
     var recommended = os === 'android' ? 'android' : (os === 'windows' ? 'win-setup' : null);
 
+    var mirrored = 0;
     map.forEach(function (pair) {
       var card = $('[data-dl="' + pair[0] + '"]');
       if (!card) return;
       var asset = pickAsset(release.assets, pair[0]);
+      if (asset && mirrorUrl(asset, release)) mirrored++;
       fillCard(card, asset, release);
       var isRec = recommended === pair[0];
       card.classList.toggle('rec', isRec);
       var nameEl = $('[data-dl-name]', card);
       if (nameEl) nameEl.textContent = asset ? asset.name : '';
     });
+
+    /* 说清楚这次点下载会从哪儿取文件。
+       镜像站上如果还没同步到最新版，这里要讲明白，否则用户看到
+       「来源：GitHub」会以为镜像坏了。 */
+    var mirrorNote = $('[data-dl-mirror-note]');
+    if (mirrorNote) {
+      if (!onMirrorHost()) {
+        mirrorNote.textContent = '';
+        mirrorNote.className = 'rel-status';
+      } else if (mirrored) {
+        mirrorNote.textContent = '安装包已同步到本站，点按钮直接从本站下载（国内直连），不用等 GitHub。';
+        mirrorNote.className = 'rel-status';
+      } else {
+        mirrorNote.textContent = '本站镜像还在同步最新版，按钮暂时指向 GitHub Releases。';
+        mirrorNote.className = 'rel-status warn';
+      }
+    }
 
     // 主按钮跟着平台走
     var primary = $('[data-cta-primary]');
@@ -254,7 +320,12 @@
   }
 
   function initDownload() {
-    loadSnapshot().then(function (snapshot) {
+    /* 快照和镜像清单并行取。清单只在镜像站上才会真的发请求，
+       GitHub Pages 上直接 resolve(null)，不产生一次必然 404 的请求。 */
+    Promise.all([loadSnapshot(), loadMirror()]).then(function (res) {
+      var snapshot = res[0];
+      mirror = res[1];
+
       // 先拿快照把页面填上，避免网络慢时下载区一直空着
       if (snapshot && snapshot.tag) applyRelease(snapshot, { stale: false });
 

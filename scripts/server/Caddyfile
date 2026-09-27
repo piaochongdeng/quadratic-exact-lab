@@ -1,0 +1,49 @@
+# 二次函数精确解析器 · 官网（腾讯云首尔 43.155.128.66）
+#
+# 这份是服务器上 /etc/caddy/Caddyfile 的母本。改完由
+#   bash scripts/deploy-site.sh --setup
+# 同步上去；直接改服务器上的文件会在下次 --setup 时被覆盖。
+#
+# 两个目录分开：
+#   /srv/quadratic-exact-lab  站点本体，来自仓库 docs/，整份替换式部署
+#   /srv/qel-downloads        安装包镜像，217MB，由 qel-mirror.timer 每天同步
+# 之所以不放在一起，是因为站点目录是「整份换掉」的，镜像文件不能跟着被换。
+#
+# 用 IP 直接访问，所以只能走 HTTP —— IP 地址签不出公网证书，浏览器会拒绝。
+# 以后有了域名，把下面的 ":80" 换成域名，Caddy 会自动申请并续期 HTTPS。
+#
+# 同机其他服务不受影响：Sub2API 在 8080（docker）、frps 在 7000。
+
+:80 {
+	# 文本类响应压缩。webp / png / exe 本身已经压过了，Caddy 会自己跳过。
+	encode zstd gzip
+
+	# 镜像清单：官网靠它判断某个安装包本地有没有。
+	# 必须不缓存 —— 每次发新版它都会变。缓存住就会出现
+	# 「文件其实已经同步好了，页面却还指着 GitHub」这种对不上的状态。
+	handle /dl-mirror.json {
+		root * /srv/qel-downloads
+		header Cache-Control "no-cache"
+		file_server
+	}
+
+	# 安装包本体。文件名里带版本号，同一个名字的内容永不改变，
+	# 所以可以长期强缓存，重复下载不再走网络。
+	# file_server 支持 Range，下到一半断了能续传。
+	handle_path /dl/* {
+		root * /srv/qel-downloads
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle {
+		root * /srv/quadratic-exact-lab
+
+		# 一律「用前先问」：浏览器可以留缓存，但每次都得回服务器确认，
+		# 拿到 304 就直接用本地副本。这样以后更新了页面或图片，
+		# 用户刷新就能看到新的，不会卡在旧版本上。
+		header Cache-Control "no-cache"
+
+		file_server
+	}
+}

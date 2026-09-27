@@ -435,6 +435,12 @@ html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .rel-bar a { color: var(--d-accent); }
 .rel-status { font-size: 12.5px; color: var(--d-ink-faint); }
 .rel-status.warn { color: var(--d-warm); }
+/* 版本条下面那几行提示（版本快照 / 平台排序 / 下载来源）为空时不该占位置。
+   用 :empty 而不是让 site.js 去切 hidden —— 它本来就是直接改 textContent 的，
+   多一个「还要记得同步 hidden」的状态，就多一个迟早会忘记的地方。 */
+.rel-status:empty { display: none; }
+/* 这一行排在最下面，由它负责和下载卡片拉开距离 */
+[data-dl-mirror-note] { margin-bottom: 22px; }
 
 .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .dl-card {
