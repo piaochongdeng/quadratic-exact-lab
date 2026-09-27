@@ -221,6 +221,27 @@ node_modules/electron/dist/electron.exe scripts/make-site-shots.js
 # 输出 docs/site/shots/*.png
 ```
 
+### 发新版本要做什么
+
+发布新版本后，官网**不用重新部署** —— 下载区读的是 GitHub Releases API，
+版本号、文件名、大小、哈希自动跟着变。只有安装包镜像需要同步一次：
+
+```bash
+bash scripts/deploy-site.sh --mirror    # 约半分钟，已是最新版就 0.5 秒跳过
+```
+
+不跑也行：服务器上每天 04:30 会自己同步。只是在新版本发布到定时任务跑之间，
+页面会显示「本站镜像还在同步最新版」，按钮暂时指向 GitHub —— 不会 404，
+但国内下载会慢。想立刻生效就跑上面那条命令。
+
+改了页面本身（`docs/`）才需要完整部署：
+
+```bash
+node scripts/make-site.js               # 若改了源码或配图，先重新生成 docs/
+git add -A && git commit -m "..."       # 部署脚本只认已提交的内容
+bash scripts/deploy-site.sh
+```
+
 ### 镜像仓库（Gitee）
 
 GitHub 访问不畅时，可用仓库内的一键脚本同步到 Gitee：
@@ -354,9 +375,10 @@ node tests/help.test.js        # 使用说明 14 项：help.js 与 docs/USAGE.md
                                #   两块数学键盘的键位逐一对齐、
                                #   说明里承诺的键盘 / 设置 / 快捷键 / 报错文案都真实存在
 node tests/dom-check.js        # 页面与脚本的 id 引用一致性
-node tests/site.test.js        # 官网 12 项：发布目录完整性、首页所有本地引用都能在磁盘上找到、
+node tests/site.test.js        # 官网 22 项：发布目录完整性、首页所有本地引用都能在磁盘上找到、
                                #   下载区没写死版本号（以后发版自动跟着变）、手机与电脑两个入口都在、
-                               #   KaTeX 不引用不存在的 auto-render、在线试用页带 noindex
+                               #   KaTeX 不引用不存在的 auto-render、在线试用页带 noindex、
+                               #   安装包镜像的启用条件与版本回退、镜像脚本的防护、服务器配置
 node tests/desktop.test.js     # 桌面版端到端 48 项（需先 npm install；未装 Electron 会自动跳过）
                                #   含数学键盘、设置面板、使用说明弹窗、三角函数根号输入，
                                #   以及手机尺寸布局回归：390×844 / 320×640 下的吸顶重叠、触控目标、
