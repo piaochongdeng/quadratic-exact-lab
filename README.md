@@ -130,16 +130,25 @@ cd android && ./gradlew assembleRelease   # 正式包（需要 android/keystore.
 和在线试用版共用同一套 KaTeX 与配图，不额外引第三方库。
 
 自有服务器那台由 **Caddy** 提供（不是 nginx），站点文件在
-`/srv/quadratic-exact-lab`，配置在 `/etc/caddy/Caddyfile`。
-同机其他服务不受影响：Sub2API 在 8080（docker）、frps 在 7000。
+`/srv/quadratic-exact-lab`，安装包镜像在 `/srv/qel-downloads`。
+两个目录分开是有意的：站点目录是「整份替换」部署的，
+217MB 的安装包放在里面会被一起换掉。同机其他服务不受影响：
+Sub2API 在 8080（docker）、frps 在 7000。
 用 IP 访问只能走 HTTP —— IP 签不出公网证书；以后有域名了，
 把 Caddyfile 里的 `:80` 换成域名，Caddy 会自动申请并续期 HTTPS。
+
+服务器上的 Caddyfile、systemd 单元、sysctl 配置，母本都在
+`scripts/server/`，由 `deploy-site.sh --setup` 一次性安装（可重复执行）。
+之所以要留在仓库里：这些配置只在服务器上存在的话，机器一重建就没人知道
+原本该写什么。
 
 **以后官网改动，部署到服务器只要一条命令**：
 
 ```bash
-bash scripts/deploy-site.sh            # 部署 git 里已提交的 docs/
+bash scripts/deploy-site.sh            # 部署 git 里已提交的 docs/，并顺手同步安装包
 bash scripts/deploy-site.sh --build    # 先重新生成 docs/ 再部署
+bash scripts/deploy-site.sh --setup    # 首次 / 机器重建：装 Caddy 配置、镜像脚本、定时器、BBR
+bash scripts/deploy-site.sh --mirror   # 只同步安装包，不动页面
 ```
 
 脚本做三件事，每一步都会自检、失败就中止：从 git 已提交的 `docs/` 树导出
@@ -156,14 +165,44 @@ bash scripts/deploy-site.sh --build    # 先重新生成 docs/ 再部署
   不为 0 就中止。
 - **未提交改动的拦截** —— 部署的是 git 里那一份，工作区改了没提交不会生效。
 
-注意**下载区读的是 GitHub Releases API**，所以以后发新版，两个站点的版本号、
-文件名、大小、哈希都会自动跟着变，不需要重新部署。但**安装包本身仍然托管在
-GitHub Releases**（`objects.githubusercontent.com`），国内下载可能慢 ——
-页面加载快不等于下载快。
+### 安装包镜像
+
+**下载区读的是 GitHub Releases API**，所以以后发新版，两个站点的版本号、
+文件名、大小、哈希都会自动跟着变，不需要重新部署。
+
+但安装包本体原来一直托管在 GitHub（`release-assets.githubusercontent.com`），
+国内实测只有 **19 KB/s**，90MB 的 EXE 要一个多小时 —— 页面加载快不等于下载快。
+所以自有服务器上放了一份镜像：
+
+- `scripts/mirror-releases.sh`（服务器上是 `/usr/local/bin/qel-mirror-releases.sh`）
+  从 GitHub Releases 同步 `apk/exe/zip` 到 `/srv/qel-downloads`。
+- 服务器上 `qel-mirror.timer` 每天 04:30 自动同步一次，关机错过会开机补跑。
+  也可以 `bash scripts/deploy-site.sh --mirror` 手动触发。
+- 页面**只在自有服务器上**才用镜像地址（`site.js` 里按域名判断）：
+  GitHub Pages 上没有 `/dl/` 目录，指过去必然 404。
+- **版本对不上就退回 GitHub 链接**。清单 `dl-mirror.json` 由镜像脚本在
+  文件校验通过之后才写，所以「清单里有这个名字」等于「本地确实有一份完整
+  且哈希正确的文件」；刚发新版、镜像还没同步时会显示「本站镜像还在同步最新版」，
+  按钮暂时指向 GitHub —— 宁可用慢的，也不给一个点了 404 的按钮。
+- 卡片上有一行「来源」，写明这次点下载是从本站还是 GitHub 取。
+
+脚本本身也做了几处防护：文件名带版本号所以幂等（已下过且哈希对得上就跳过，
+重跑 0.5 秒结束）；先下到 `.part`、校验 sha256 通过才改名，中途断了不会留下
+一个「看着存在、其实是半截」的安装包；清单最后原子写；`flock` 防止手动触发
+撞上定时任务；拉取失败时**不**清理旧版本，免得把还能用的文件删掉。
+
+顺带开了 **BBR**（`/etc/sysctl.d/99-qel-bbr.conf`）。这台机器在首尔，从国内
+访问是高延迟跨境链路，内核默认的 cubic 丢一点包就把窗口砍半，实测下载安装包
+只有 60 KB/s 左右；换 BBR 后中位数约 **2.5 MB/s**，同一个 90MB 的安装包从
+25 分钟缩到 40 秒左右。同一条线路从本机实测：镜像站 2.5 MB/s，GitHub 直连
+19 KB/s。
 
 **下载区的版本号不是写死的**：页面加载时先读 GitHub Releases API 拿最新发布，
 拿到什么就显示什么，所以以后发新版，官网自动跟着变，不用改任何文件。
 API 不通（限流 / 断网）时退回同目录的 `site/releases.json`（打包时的快照）并明确提示。
+国内用户经常连 `api.github.com` 都连不上 —— 这种情况下页面照样完整可用：
+用本地快照填版本号，按钮仍然指向本站镜像（已实测：拦掉 `api.github.com` 后
+三个按钮依然全部指向 `/dl/`）。
 
 重新构建官网：
 
@@ -253,7 +292,9 @@ quadratic-exact-lab/
 │  ├─ make-screenshots.js    用 Electron 拍应用界面截图（2 倍像素，深/浅两套主题）
 │  ├─ make-site-shots.js     拍官网页面本身，用于人工/视觉复核
 │  ├─ optimize-screens.py    截图转 WebP（1x / @2x），并裁出首屏特写
-│  ├─ deploy-site.sh   把 docs/ 部署到自有服务器（从 git 导出 → 原子替换 → 校验）
+│  ├─ deploy-site.sh   把 docs/ 部署到自有服务器（从 git 导出 → 原子替换 → 校验 → 同步镜像）
+│  ├─ mirror-releases.sh     从 GitHub Releases 同步安装包到服务器（幂等、先校验后改名）
+│  ├─ server/          服务器配置的母本（Caddyfile、systemd 单元、BBR 的 sysctl）
 │  └─ push-gitee.ps1   一键同步到 Gitee 镜像
 ├─ www/                ↑ 由 make-www.js 生成的 Android assets（gitignore）
 ├─ desktop/            桌面应用外壳

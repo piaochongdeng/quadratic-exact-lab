@@ -194,30 +194,34 @@ if "${SSH[@]}" "test -x /usr/local/bin/qel-mirror-releases.sh"; then
   "${SSH[@]}" "sudo -n systemctl start qel-mirror.service; sudo -n tail -4 /var/log/qel-mirror.log" \
     | sed 's/^/    /'
 
-  # 清单里的 tag 必须等于最新发布，否则页面会退回 GitHub 链接 ——
-  # 那样也不至于出错，但等于镜像白做了，得让人看见。
-  TAG="$(curl -s -m 20 -H 'Accept: application/vnd.github+json' \
-         "https://api.github.com/repos/piaochongdeng/quadratic-exact-lab/releases/latest" \
-         | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
-  MTAG="$(curl -s -m 20 "$URL/dl-mirror.json" | sed -n 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
-  if [ -n "$TAG" ] && [ "$TAG" = "$MTAG" ]; then
-    echo "    镜像版本 $MTAG 与最新发布一致 ✓"
-  else
-    echo "    ! 最新发布是 $TAG，镜像清单是 $MTAG —— 页面会退回 GitHub 链接"
-  fi
-
-  # 真下 1 字节，确认镜像文件对外能取到（只看清单不够，清单对了文件也可能没权限）
-  for a in apk exe zip; do
-    F=$(curl -s -m 20 "$URL/dl-mirror.json" \
-        | tr ',' '\n' | sed -n "s/.*\"\([^\"]*\.$a\)\".*/\1/p" | head -1)
-    [ -n "$F" ] || continue
-    C=$(curl -s -m 20 -r 0-0 -o /dev/null -w '%{http_code}' "$URL/dl/$F")
-    if [ "$C" = "200" ] || [ "$C" = "206" ]; then
-      echo "    $F 可下载 ✓"
+  # 核对与自测都在服务器上做：这台 Windows 机器的 curl 连不上 api.github.com
+  # （schannel 吊销检查失败，实测 exit 35），而服务器直连没问题。
+  # 另外这些检查一律不能把已经成功的部署判成失败 —— 所以整段都带 || true，
+  # 出问题只提示，不改退出码。
+  "${SSH[@]}" '
+    API="https://api.github.com/repos/piaochongdeng/quadratic-exact-lab/releases/latest"
+    TAG=$(curl -fsSL -m 20 -H "Accept: application/vnd.github+json" "$API" 2>/dev/null \
+          | jq -r ".tag_name // empty" 2>/dev/null || true)
+    MTAG=$(jq -r ".tag // empty" '"$DL_DIR"'/dl-mirror.json 2>/dev/null || true)
+    if [ -n "$TAG" ] && [ "$TAG" = "$MTAG" ]; then
+      echo "    镜像版本 $MTAG 与最新发布一致 ✓"
+    elif [ -z "$TAG" ]; then
+      echo "    ? 读不到最新发布版本，跳过核对"
     else
-      echo "    ! $F 取不到（HTTP $C）"
+      echo "    ! 最新发布是 $TAG，镜像清单是 $MTAG —— 页面会退回 GitHub 链接"
     fi
-  done
+
+    # 清单里的每个文件都真取一次（前 1 字节）。
+    # 只看清单不够：清单对了，文件也可能权限不对或根本没落盘。
+    for f in $(jq -r ".assets | keys[]" '"$DL_DIR"'/dl-mirror.json 2>/dev/null || true); do
+      C=$(curl -s -m 20 -r 0-0 -o /dev/null -w "%{http_code}" "http://127.0.0.1/dl/$f" || echo 000)
+      if [ "$C" = "200" ] || [ "$C" = "206" ]; then
+        echo "    $f 可下载 ✓"
+      else
+        echo "    ! $f 取不到（HTTP $C）"
+      fi
+    done
+  ' || true
 else
   echo "    跳过：服务器上还没装镜像脚本，跑一次 bash scripts/deploy-site.sh --setup"
 fi

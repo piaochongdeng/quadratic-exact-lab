@@ -300,11 +300,33 @@ t('部署脚本会把镜像脚本装到服务器并核对版本', () => {
   assert(/--setup/.test(code), 'deploy-site.sh 没有 --setup');
   assert(/qel-mirror-releases\.sh/.test(code), '--setup 没有安装镜像脚本');
   assert(/qel-mirror\.timer/.test(code), '--setup 没有装定时器');
-  /* 光看清单不够：清单对了，文件也可能没有读权限 */
-  assert(/dl\/\$F/.test(code) || /"\$URL\/dl\/\$F"/.test(code),
+  /* 光看清单不够：清单对了，文件也可能权限不对或根本没落盘 */
+  assert(/curl[^\n]*\/dl\/\$f/.test(code),
     '部署后没有真的去取一次镜像文件 —— 清单存在不等于文件能被下载');
   assert(/"\$TAG" = "\$MTAG"/.test(code),
     '部署后没有核对镜像版本与最新发布是否一致');
+});
+
+/* 这条是实测踩出来的：部署脚本原本在本机 curl api.github.com 核对版本，
+   而这台 Windows 机器的 curl 连不上它（schannel 吊销检查失败，exit 35）。
+   set -o pipefail 让这个失败变成了脚本的退出码 —— 站点其实已经部署好、
+   78 个文件也逐字节校验通过了，脚本却报失败。以后接进 CI 或者别的自动化，
+   就会被当成「部署挂了」，比不检查还糟。 */
+t('镜像核对放在服务器上做，失败不会把已经成功的部署判成失败', () => {
+  const code = fs.readFileSync(path.join(ROOT, 'scripts', 'deploy-site.sh'), 'utf8')
+    .split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+  const i = code.indexOf('api.github.com');
+  assert(i >= 0, '找不到 GitHub API 的版本核对');
+
+  // 必须包在 SSH 远程块里
+  assert(/"\$\{SSH\[@\]\}" '/.test(code.slice(Math.max(0, i - 400), i)),
+    'GitHub API 核对又回到本机执行了 —— 本机 curl 连不上 api.github.com，' +
+    '会把已经成功的部署判成失败');
+
+  // 整段必须容忍失败
+  assert(/' \|\| true/.test(code.slice(i, i + 1500)),
+    '镜像核对没有容错 —— 网络抖一下就会让成功的部署报失败');
 });
 
 console.log('\n  通过 ' + pass + ' 项，失败 ' + fail + ' 项');
