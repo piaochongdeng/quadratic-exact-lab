@@ -108,23 +108,18 @@ html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .topbar .nav a:hover { background: rgba(255, 255, 255, .09); color: #fff; }
 .topbar .brand-mark { background: linear-gradient(150deg, var(--d-accent), #2b6cb0); }
 
-/* 滚过 hero 之后才变成浅色磨砂条 */
+/* 滚过 hero 之后变成深色磨砂条。
+   一开始做成浅色条，但页面里「下载」和「页脚」两段都是深色，
+   浅条压上去会在深色区中间横切一刀，视觉复核反复指出这一点；
+   统一用深色就再也没有硬边——反正首屏本来就是深色。 */
 .topbar.solid {
-  background: rgba(244, 242, 238, .86);
+  background: rgba(16, 19, 23, .88);
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
-  border-bottom-color: var(--line);
+  border-bottom-color: var(--d-line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
 }
-.topbar.solid .brand { color: var(--ink); }
-.topbar.solid .brand-name small { color: var(--ink-faint); }
-.topbar.solid .nav a { color: var(--ink-soft); }
-.topbar.solid .nav a:hover { background: rgba(35, 39, 46, .06); color: var(--ink); }
-.topbar.solid .brand-mark { background: linear-gradient(150deg, var(--accent), #1b4f85); }
 
-/* 深色模式：hero 之外也用深色条 */
-@media (prefers-color-scheme: dark) {
-  .topbar.solid { background: rgba(16, 19, 23, .86); border-bottom-color: var(--d-line); }
-}
 .topbar .wrap { display: flex; align-items: center; gap: 18px; height: 62px; }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
@@ -186,7 +181,7 @@ html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .btn-on-dark:hover { background: #eef2f7; border-color: #eef2f7; }
 /* 下载区里推荐的那张卡用蓝底实心按钮，其余降成描边——
    三个一样大的白按钮摆一起，用户分不出该点哪个（被挑出来过）。 */
-.dl-card .btn { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.3); color: #fff; }
+.dl-card .btn { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.5); color: #fff; }
 .dl-card .btn:hover { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.52); color: #fff; }
 .dl-card.rec .btn {
   background: var(--d-accent); border-color: var(--d-accent); color: #0f1216;
@@ -439,9 +434,9 @@ html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .dl-card:hover { border-color: var(--d-line-strong); transform: translateY(-3px); box-shadow: 0 22px 50px rgba(0,0,0,.4); }
 .dl-card.rec { border-color: rgba(106, 169, 233, .5); }
 .dl-card.rec::after {
-  content: "推荐"; position: absolute; top: -9px; right: 16px;
-  background: var(--d-accent); color: #0f1216; font-size: 11.5px; font-weight: 700;
-  padding: 2px 10px; border-radius: 999px; letter-spacing: .02em;
+  content: "推荐"; position: absolute; top: 12px; right: 12px;
+  background: var(--d-accent); color: #0f1216; font-size: 11px; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px; letter-spacing: .02em;
 }
 .dl-os { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .dl-os svg { flex: none; }
@@ -451,9 +446,10 @@ html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .dl-desc { font-size: 13.5px; line-height: 1.7; color: var(--d-ink-soft); margin-bottom: 14px; min-height: 5.1em; }
 .dl-file {
   font-family: var(--mono); font-size: 11.5px; color: var(--d-ink-soft);
-  /* 文件名是用户核对下载对不对的依据，底色和描边都要比卡片本身明显一点 */
-  background: rgba(0,0,0,.34); border: 1px solid var(--d-line-strong);
-  border-radius: 6px; padding: 6px 9px; margin-bottom: 12px;
+  /* 文件名是用户核对下载对不对的依据。用左侧色条而不是整圈描边——
+     整圈描边 + 等宽字体看起来太像输入框，会被当成能点的东西。 */
+  background: rgba(0,0,0,.3); border-left: 3px solid var(--d-accent);
+  border-radius: 4px; padding: 6px 10px; margin-bottom: 12px;
   overflow-wrap: anywhere; line-height: 1.45;
 }
 .dl-file:empty { display: none; }
@@ -467,7 +463,11 @@ html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
   margin-top: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--d-ink-faint);
   overflow-wrap: anywhere; line-height: 1.5;
 }
-.dl-hash summary { cursor: pointer; font-family: var(--sans); font-size: 12px; color: var(--d-ink-soft); }
+.dl-hash summary {
+  cursor: pointer; font-family: var(--sans); font-size: 12px;
+  color: var(--d-ink-soft); list-style-position: inside;
+}
+.dl-hash summary::marker { color: var(--d-accent); }
 .dl-hash summary:hover { color: var(--d-ink-soft); }
 
 .dl-foot {
@@ -606,7 +606,6 @@ body.lb-open { overflow: hidden; }
 @media (prefers-color-scheme: dark) {
   body { background: #101317; color: var(--d-ink); }
   .topbar { background: transparent; }
-  .topbar.solid { background: rgba(16, 19, 23, .9); border-bottom-color: var(--d-line); }
   .brand { color: var(--d-ink); }
   .brand-name small { color: var(--d-ink-faint); }
   .nav a { color: var(--d-ink-soft); }
