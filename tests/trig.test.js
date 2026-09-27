@@ -437,6 +437,99 @@ CASES.forEach(function (cs) {
   });
 });
 
+/* ================= 根号输入（v1.4.1） ================= */
+
+function userVal(fn, value, extra) {
+  const input = Object.assign({ fn: fn, valueSource: 'user', value: value, angle: '', sideKind: 'opposite', side: '1', digits: 4 }, extra || {});
+  const r = R.build(input);
+  assert.ok(r.ok, '报告生成失败：' + r.error);
+  return r;
+}
+
+t('函数值可以写根号：sin θ = √3/2 → 60°', () => {
+  const md = userVal('sin', '√3/2').markdown;
+  assert.ok(md.indexOf('\\frac{\\sqrt{3}}{2}') >= 0, '已知值未按根式排版');
+  assert.ok(/\\theta \\approx 60/.test(md), '未反推出 60°');
+  assert.ok(/\\cos\\theta.*\\frac\{1\}\{2\}/.test(md), 'cos 未给出精确值 1/2');
+  assert.ok(/\\tan\\theta.*\\sqrt\{3\}/.test(md), 'tan 未给出精确值 √3');
+  assert.ok(md.indexOf('是最简根式') >= 0, '说明里应称这种输入为最简根式而不是有理数');
+});
+
+t('sin θ = √2/2 → 45°，两个值都精确', () => {
+  const md = userVal('sin', '√2/2').markdown;
+  assert.ok(/\\theta \\approx 45/.test(md), '未反推出 45°');
+  assert.ok(md.indexOf('\\frac{\\sqrt{2}}{2}') >= 0, '缺少 √2/2');
+  assert.ok(/\\tan\\theta.*\| \$1\$ \|/.test(md), 'tan 未给出 1');
+});
+
+t('tan θ = √3 → 60°', () => {
+  const md = userVal('tan', '√3').markdown;
+  assert.ok(/\\theta \\approx 60/.test(md), '未反推出 60°');
+  assert.ok(/\\sin\\theta.*\\frac\{\\sqrt\{3\}\}\{2\}/.test(md), 'sin 未给出 √3/2');
+  assert.ok(/\\cos\\theta.*\\frac\{1\}\{2\}/.test(md), 'cos 未给出 1/2');
+});
+
+t('tan θ = √3/3 → 30°', () => {
+  assert.ok(/\\theta \\approx 30/.test(userVal('tan', '√3/3').markdown), '未反推出 30°');
+});
+
+t('cos θ = √3/2 → 30°', () => {
+  const md = userVal('cos', '√3/2').markdown;
+  assert.ok(/\\theta \\approx 30/.test(md), '未反推出 30°');
+  assert.ok(/\\tan\\theta.*\\frac\{\\sqrt\{3\}\}\{3\}/.test(md), 'tan 未给出 √3/3');
+});
+
+t('带根号的函数值照样能算直角三角形', () => {
+  const r = userVal('sin', '√3/2', { sideKind: 'hypotenuse', side: '2' });
+  assert.ok(/\\theta \\approx 60/.test(r.markdown), '角度不对');
+  assert.ok(r.data && r.data.tri, '没有三角形数据');
+  assert.ok(Math.abs(r.data.tri.o.num - Math.sqrt(3)) < 1e-9, '对边应为 √3');
+  assert.ok(Math.abs(r.data.tri.a.num - 1) < 1e-9, '邻边应为 1');
+  assert.ok(Math.abs(r.data.tri.h.num - 2) < 1e-9, '斜边应为 2');
+});
+
+t('根号函数值越界或乱写时，报错看得懂', () => {
+  const r = R.build({ fn: 'sin', valueSource: 'user', value: '√2', angle: '', sideKind: 'opposite', side: '1', digits: 4 });
+  assert.strictEqual(r.ok, false, 'sin θ = √2 大于 1，应当被拦下');
+  assert.ok(/不能大于 1/.test(r.error), '报错文案不对：' + r.error);
+
+  const r2 = R.build({ fn: 'sin', valueSource: 'user', value: '√√', angle: '', sideKind: 'opposite', side: '1', digits: 4 });
+  assert.strictEqual(r2.ok, false, '乱写的根号应当被拦下');
+  assert.ok(/无法识别/.test(r2.error) && r2.error.indexOf('√3/2') >= 0, '报错里应演示正确写法：' + r2.error);
+});
+
+t('角度仍然只能填普通的数', () => {
+  const r = R.build({ fn: 'sin', valueSource: 'auto', angle: '√2', sideKind: 'opposite', side: '1', digits: 4 });
+  assert.strictEqual(r.ok, false, '角度填根号应当被拦下');
+  assert.ok(/普通的数/.test(r.error), '报错文案不对：' + r.error);
+});
+
+t('根号写法与小数写法的角度一致，但只有根号写法精确', () => {
+  const a = userVal('sin', '√3/2');
+  const b = userVal('sin', '0.8660254037844386');
+  assert.ok(Math.abs(a.data.angleNorm - b.data.angleNorm) < 1e-3, '两种写法角度不一致：' +
+    a.data.angleNorm + ' vs ' + b.data.angleNorm);
+  assert.strictEqual(a.data.exact, true, '根号写法应当能给出精确值');
+  assert.strictEqual(b.data.exact, false, '小数写法只能给近似值');
+  assert.ok(a.data.ratio && a.data.ratio.sin, '缺少函数值数据');
+});
+
+t('根号输入的近似值按设定精度排版', () => {
+  assert.ok(userVal('sin', '√3/2', { digits: 0 }).markdown.indexOf('$2$') >= 0, '精度 0 位时 tan 应四舍五入成 2');
+  const md6 = userVal('sin', '√3/2', { digits: 6 }).markdown;
+  assert.ok(md6.indexOf('1.732051') >= 0, '精度 6 位时 tan 应为 1.732051');
+});
+
+t('根号输入的报告排版没有残缺公式', () => {
+  ['√3/2', '√2/2', '√3/3', '(√6-√2)/4'].forEach(function (v) {
+    const md = userVal('tan', v).markdown;
+    extractMath(md).forEach(function (piece) {
+      const bad = malformed(piece.tex);
+      assert.strictEqual(bad.length, 0, v + ' 的公式有残缺：' + bad.join('；'));
+    });
+  });
+});
+
 console.log('\n========================================');
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项' + (katex ? '（含 KaTeX 排版校验）' : '（未加载 KaTeX）'));
 console.log('========================================\n');

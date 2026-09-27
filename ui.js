@@ -82,6 +82,115 @@
 
   var el = {};
   var debounceTimer = null;
+  var lastField = null;      /* 最后一次聚焦过的输入框，数学键盘往这里插符号 */
+
+  /* ================= 本机设置 =================
+   * 全部存在本机 localStorage 里，不联网、不上传。
+   * 设置改动立即生效并立刻重算报告，不需要点「应用」。
+   */
+  var Settings = {
+    KEY: 'qel-settings',
+    STATE_KEY: 'qel-state',
+    defaults: { decimals: 4, detail: 'full', theme: 'light', boot: 'keep' },
+    data: null,
+
+    load: function () {
+      var d = {};
+      Object.keys(Settings.defaults).forEach(function (k) { d[k] = Settings.defaults[k]; });
+      try {
+        var raw = localStorage.getItem(Settings.KEY);
+        if (raw) {
+          var obj = JSON.parse(raw);
+          Object.keys(d).forEach(function (k) { if (obj[k] !== undefined) d[k] = obj[k]; });
+        }
+      } catch (e) { /* 隐私模式 / 存储被禁：静默用默认值 */ }
+      var n = Number(d.decimals);
+      d.decimals = (isFinite(n) && n >= 0 && n <= 10) ? Math.round(n) : 4;
+      d.detail = d.detail === 'brief' ? 'brief' : 'full';
+      d.theme = d.theme === 'dark' ? 'dark' : 'light';
+      d.boot = d.boot === 'reset' ? 'reset' : 'keep';
+      Settings.data = d;
+      document.documentElement.setAttribute('data-theme', d.theme);
+      return d;
+    },
+
+    save: function (silent) {
+      try { localStorage.setItem(Settings.KEY, JSON.stringify(Settings.data)); }
+      catch (e) { /* 存不下就算了，不影响使用 */ }
+      if (!silent) Settings.flash('设置已保存到本机');
+    },
+
+    flash: function (msg) {
+      if (!el.optSaved) return;
+      el.optSaved.textContent = msg;
+      clearTimeout(el.optSaved._t);
+      el.optSaved._t = setTimeout(function () { el.optSaved.textContent = ''; }, 1800);
+    },
+
+    /** 把设置同步到界面控件上 */
+    syncUI: function () {
+      var d = Settings.data;
+      if (el.optDecimals) el.optDecimals.value = String(d.decimals);
+      if (el.optDetail) {
+        Array.prototype.forEach.call(el.optDetail.querySelectorAll('button'), function (b) {
+          b.setAttribute('aria-selected', b.dataset.detail === d.detail ? 'true' : 'false');
+        });
+      }
+      if (el.optTheme) {
+        Array.prototype.forEach.call(el.optTheme.querySelectorAll('button'), function (b) {
+          b.setAttribute('aria-selected', b.dataset.theme === d.theme ? 'true' : 'false');
+        });
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('input[name="opt-boot"]'), function (r) {
+        r.checked = (r.value === d.boot);
+      });
+      document.documentElement.setAttribute('data-theme', d.theme);
+      Settings.broadcast();
+    },
+
+    /* 把设置广播给其他工作区（三角函数那份 UI 就靠这个跟「小数位数」保持一致） */
+    broadcast: function () {
+      try {
+        document.dispatchEvent(new CustomEvent('qel-settings', { detail: Settings.data }));
+      } catch (e) { /* 老到没有 CustomEvent 的环境：各工作区各管各的，不影响使用 */ }
+    },
+
+    set: function (patch, silent) {
+      /* 小数位数统一按 0 ~ 10 归一，三角函数那边的精度框也用它 */
+      if (patch && patch.decimals !== undefined) {
+        var dn = Number(patch.decimals);
+        patch.decimals = (isFinite(dn) && dn >= 0 && dn <= 10) ? Math.round(dn) : Settings.defaults.decimals;
+      }
+      Object.assign(Settings.data, patch);
+      Settings.save(silent);
+      Settings.syncUI();
+      /* 只换主题时重画画布即可；其余改动要重新生成报告 */
+      var keys = Object.keys(patch);
+      if (keys.length === 1 && keys[0] === 'theme') Plot.draw();
+      else update();
+    },
+
+    /** 记住当前输入（换主题、改设置都不该丢） */
+    saveState: function (input) {
+      try {
+        localStorage.setItem(Settings.STATE_KEY, JSON.stringify({
+          form: state.form, values: state.values, domain: state.domain
+        }));
+      } catch (e) { /* 忽略 */ }
+    },
+
+    loadState: function () {
+      try {
+        var raw = localStorage.getItem(Settings.STATE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    },
+
+    clearState: function () {
+      try { localStorage.removeItem(Settings.STATE_KEY); } catch (e) { /* 忽略 */ }
+    }
+  };
+
   var Desktop = window.QuadDesktop || null;   /* 桌面版由 preload 注入；网页版为 null */
   var Android = window.QuadAndroid || null;   /* Android 壳用 addJavascriptInterface 注入；网页版为 null */
 
@@ -241,6 +350,9 @@
       left: { value: state.domain.left.unbounded ? '' : state.domain.left.value, open: state.domain.left.open },
       right: { value: state.domain.right.unbounded ? '' : state.domain.right.value, open: state.domain.right.open }
     };
+    /* 报告选项跟着设置走 */
+    input.decimals = Settings.data.decimals;
+    input.detail = Settings.data.detail;
     return input;
   }
 
@@ -267,6 +379,7 @@
     renderChips(res.data, res.markdown);
     Plot.setData(res.data, res.givenPoints);
     if (!opts.skipHash) writeHash(input);
+    Settings.saveState(input);
   }
 
   function renderChips(d, markdown) {
@@ -291,6 +404,166 @@
       katexInline(c.tex, v);
     });
   }
+
+  /* ================= 数学键盘 =================
+   * 手机数字键盘没有 √，PC 键盘也打不出 √，所以根号只能靠点。
+   * 插符号一律走「当前聚焦的输入框」；没有聚焦时退回最后一个聚焦过的框，
+   * 再没有就退回当前工作区的第一格——永远不会点了没反应。
+   */
+
+  function editableInputs() {
+    var scope = (AppMode.current() === 'trig' && el.trigApp) ? el.trigApp : el.quadApp;
+    if (!scope) scope = document;
+    var list = scope.querySelectorAll('input[type="text"]');
+    return Array.prototype.filter.call(list, function (i) { return !i.disabled; });
+  }
+
+  function keypadTarget() {
+    var a = document.activeElement;
+    if (a && a.tagName === 'INPUT' && a.type === 'text' && !a.disabled) return a;
+    if (lastField && !lastField.disabled && lastField.offsetParent !== null) return lastField;
+    var list = editableInputs();
+    return list.length ? list[0] : null;
+  }
+
+  /** 在光标处插入文本；caretOffset 为插入后光标相对文本末尾的偏移 */
+  function insertAtCaret(input, text, caretOffset) {
+    var start = (input.selectionStart === null || input.selectionStart === undefined)
+      ? input.value.length : input.selectionStart;
+    var end = (input.selectionEnd === null || input.selectionEnd === undefined)
+      ? input.value.length : input.selectionEnd;
+    input.value = input.value.slice(0, start) + text + input.value.slice(end);
+    var pos = start + text.length + (caretOffset || 0);
+    try { input.setSelectionRange(pos, pos); } catch (e) { /* 个别浏览器拒绝，忽略 */ }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  }
+
+  /** 判断 '+/-' 是否出现在最外层（括号深度为 0） */
+  function hasTopLevelOp(str) {
+    var d = 0;
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charAt(i);
+      if (c === '(') d++;
+      else if (c === ')') d--;
+      else if (d === 0 && (c === '+' || c === '-')) return true;
+    }
+    return false;
+  }
+
+  /** 把整个数值取反：'-3' → '3'，'3/4' → '-3/4'，'1+√3' → '-(1+√3)' */
+  function toggleSign(input) {
+    var v = input.value.trim();
+    if (v === '') { insertAtCaret(input, '-', 0); return; }
+    if (v.charAt(0) === '-' && v.charAt(1) === '(' && v.charAt(v.length - 1) === ')') {
+      input.value = v.slice(2, -1);
+    } else if (v.charAt(0) === '-' && !hasTopLevelOp(v.slice(1))) {
+      input.value = v.slice(1);
+    } else if (hasTopLevelOp(v)) {
+      input.value = '-(' + v + ')';
+    } else {
+      input.value = '-' + v;
+    }
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) { /* 忽略 */ }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  }
+
+  function backspace(input) {
+    var start = (input.selectionStart === null || input.selectionStart === undefined)
+      ? input.value.length : input.selectionStart;
+    var end = (input.selectionEnd === null || input.selectionEnd === undefined)
+      ? input.value.length : input.selectionEnd;
+    if (start === end) {
+      if (start === 0) return;
+      input.value = input.value.slice(0, start - 1) + input.value.slice(end);
+      start = start - 1;
+    } else {
+      input.value = input.value.slice(0, start) + input.value.slice(end);
+    }
+    try { input.setSelectionRange(start, start); } catch (e) { /* 忽略 */ }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  }
+
+  /** 给一块数学键盘挂上事件；target 缺省时自动找当前工作区的输入框 */
+  function bindKeypad(root) {
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('button[data-insert]'), function (b) {
+      b.addEventListener('click', function () {
+        var target = keypadTarget();
+        if (!target) { toast('请先点一下要填写的输入框'); return; }
+        insertAtCaret(target, b.dataset.insert, Number(b.dataset.caret || 0));
+      });
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('button[data-action]'), function (b) {
+      b.addEventListener('click', function () {
+        var target = keypadTarget();
+        if (!target) { toast('请先点一下要填写的输入框'); return; }
+        var a = b.dataset.action;
+        if (a === 'neg') toggleSign(target);
+        else if (a === 'back') backspace(target);
+        else if (a === 'clear') {
+          target.value = '';
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+          target.focus();
+        }
+      });
+    });
+  }
+
+  /* ================= 使用说明弹窗 ================= */
+
+  var Help = {
+    lastFocus: null,      /* 关掉说明后把焦点还回去，接着点数学键盘 */
+
+    build: function () {
+      if (el.helpBody.dataset.built === '1') return;
+      var src = (window.QuadHelp && window.QuadHelp.markdown) ? window.QuadHelp.markdown : '';
+      if (!src) {
+        el.helpBody.innerHTML = '<p>使用说明未能载入（help.js 缺失）。</p>';
+        return;
+      }
+      el.helpBody.innerHTML = mdRenderer.render(src);
+      el.helpBody.dataset.built = '1';
+    },
+
+    isOpen: function () { return !el.helpModal.hidden; },
+
+    open: function () {
+      Help.lastFocus = document.activeElement;
+      Help.build();
+      el.helpModal.hidden = false;
+      el.helpBody.scrollTop = 0;
+      if (el.btnHelpClose) el.btnHelpClose.focus();
+    },
+
+    close: function () {
+      el.helpModal.hidden = true;
+      if (Help.lastFocus && Help.lastFocus.focus) Help.lastFocus.focus();
+      else if (lastField) lastField.focus();
+    },
+
+    toggle: function () { if (Help.isOpen()) Help.close(); else Help.open(); }
+  };
+
+  var SettingsPanel = {
+    isOpen: function () { return !el.settingsModal.hidden; },
+
+    open: function () {
+      if (Help.isOpen()) Help.close();
+      Settings.syncUI();
+      el.settingsModal.hidden = false;
+      if (el.btnSettingsClose) el.btnSettingsClose.focus();
+    },
+
+    close: function () {
+      el.settingsModal.hidden = true;
+      if (lastField && lastField.focus && lastField.offsetParent !== null) lastField.focus();
+    },
+
+    toggle: function () { if (SettingsPanel.isOpen()) SettingsPanel.close(); else SettingsPanel.open(); }
+  };
 
   /* ================= 工作区切换（二次函数 / 三角函数） ================= */
 
@@ -1047,12 +1320,76 @@
     });
 
     el.btnTheme.addEventListener('click', function () {
-      var cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-      var next = cur === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('qel-theme', next); } catch (e) { /* 忽略 */ }
-      Plot.draw();
+      var next = Settings.data.theme === 'dark' ? 'light' : 'dark';
+      Settings.set({ theme: next });
       toast(next === 'dark' ? '已切换到深色主题' : '已切换到浅色主题');
+    });
+
+    /* ---- 数学键盘：两个工作区各一块，逻辑完全一样 ---- */
+    [el.mathKeys, el.trigMathKeys].forEach(bindKeypad);
+
+    /* 记住最后聚焦的输入框：数学键盘的落点 */
+    document.addEventListener('focusin', function (ev) {
+      var t = ev.target;
+      if (t && t.tagName === 'INPUT' && t.type === 'text') lastField = t;
+    });
+
+    /* ---- 设置 ---- */
+    el.btnSettings.addEventListener('click', function () { SettingsPanel.open(); });
+    el.btnSettingsClose.addEventListener('click', function () { SettingsPanel.close(); });
+    el.settingsBackdrop.addEventListener('click', function () { SettingsPanel.close(); });
+
+    /* ---- 使用说明 ---- */
+    el.btnHelp.addEventListener('click', function () { Help.open(); });
+    el.btnHelp2.addEventListener('click', function () {
+      if (SettingsPanel.isOpen()) SettingsPanel.close();
+      Help.open();
+    });
+    el.btnHelpClose.addEventListener('click', function () { Help.close(); });
+    el.helpBackdrop.addEventListener('click', function () { Help.close(); });
+    el.footerSettingsLink.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      SettingsPanel.open();
+    });
+    el.btnHelpCopy.addEventListener('click', function () {
+      var src = (window.QuadHelp && window.QuadHelp.markdown) || '';
+      if (!src) { toast('说明文档缺失'); return; }
+      copyText(src)
+        .then(function () { toast('使用说明已复制为 Markdown'); })
+        .catch(function () { toast('复制失败'); });
+    });
+
+    /* ---- 设置面板 ---- */
+    el.optDecimals.addEventListener('input', function () {
+      var n = Number(el.optDecimals.value);
+      if (!isFinite(n)) return;
+      Settings.set({ decimals: Math.max(0, Math.min(8, Math.round(n))) });
+    });
+    el.optDecimals.addEventListener('change', function () {
+      /* 离焦时把写歪的值夹回合法范围，免得框里显示 99 实际用 8 */
+      el.optDecimals.value = String(Settings.data.decimals);
+    });
+    Array.prototype.forEach.call(el.optDetail.querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { Settings.set({ detail: b.dataset.detail }); });
+    });
+    Array.prototype.forEach.call(el.optTheme.querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { Settings.set({ theme: b.dataset.theme }); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="opt-boot"]'), function (r) {
+      r.addEventListener('change', function () {
+        Settings.set({ boot: r.value }, true);
+        Settings.flash('设置已保存到本机');
+      });
+    });
+    el.btnOptReset.addEventListener('click', function () {
+      Settings.set({
+        decimals: Settings.defaults.decimals,
+        detail: Settings.defaults.detail,
+        theme: Settings.defaults.theme,
+        boot: Settings.defaults.boot
+      }, true);
+      Settings.flash('已恢复默认设置');
+      toast('已恢复默认设置');
     });
 
     el.btnZoomIn.addEventListener('click', function () { Plot.zoomAt(0.5, 0.5, 1 / 1.25); });
@@ -1065,6 +1402,12 @@
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       var k = ev.key.toLowerCase();
+      if (ev.key === '?' || (k === '/' && ev.shiftKey)) { Help.toggle(); return; }
+      if (k === ',') { SettingsPanel.toggle(); return; }
+      if (ev.key === 'Escape') {
+        if (Help.isOpen()) { Help.close(); return; }
+        if (SettingsPanel.isOpen()) { SettingsPanel.close(); return; }
+      }
       if (k === '1' || k === '2' || k === '3' || k === '4') {
         state.form = k === '1' ? 'general' : (k === '2' ? 'vertex' : (k === '3' ? 'factored' : 'points'));
         syncFormTabs(); buildCoefInputs(); update();
@@ -1104,14 +1447,32 @@
     el.btnZoomIn = $('btn-zoom-in');
     el.btnZoomOut = $('btn-zoom-out');
     el.btnReset = $('btn-reset');
+    el.mathKeys = $('math-keys');
+    el.trigMathKeys = $('trig-math-keys');
+    el.settingsModal = $('settings-modal');
+    el.settingsBackdrop = $('settings-backdrop');
+    el.btnSettings = $('btn-settings');
+    el.btnSettingsClose = $('btn-settings-close');
+    el.btnHelp = $('btn-help');
+    el.btnHelp2 = $('btn-help-2');
+    el.btnHelpCopy = $('btn-help-copy');
+    el.btnHelpClose = $('btn-help-close');
+    el.helpModal = $('help-modal');
+    el.helpBackdrop = $('help-backdrop');
+    el.helpBody = $('help-body');
+    el.footerSettingsLink = $('footer-settings-link');
+    el.optDecimals = $('opt-decimals');
+    el.optDetail = $('opt-detail');
+    el.optTheme = $('opt-theme');
+    el.optSaved = $('opt-saved');
+    el.btnOptReset = $('btn-opt-reset');
   }
 
   function boot() {
     cache();
 
-    var saved = null;
-    try { saved = localStorage.getItem('qel-theme'); } catch (e) { /* 忽略 */ }
-    document.documentElement.setAttribute('data-theme', saved === 'dark' ? 'dark' : 'light');
+    Settings.load();
+    Settings.syncUI();
 
     EXAMPLES.forEach(function (ex, i) {
       var o = document.createElement('option');
@@ -1124,8 +1485,14 @@
     var mode = AppMode.detect();
     AppMode.apply(mode);
 
+    /* 恢复顺序：分享链接 > 上次的输入 > 默认例子。
+       「每次打开时」设成「回到默认例子」时跳过第二步，但链接仍然生效。 */
     var fromHash = (mode === 'quad') ? readHash() : null;
     if (fromHash) applyState(fromHash);
+    else if (mode === 'quad' && Settings.data.boot === 'keep') {
+      var lastState = Settings.loadState();
+      if (lastState) applyState(lastState);
+    }
 
     syncFormTabs();
     buildCoefInputs();
@@ -1232,7 +1599,32 @@
     setMode: function (mode) { return AppMode.set(mode); },
     getMode: function () { return AppMode.current(); },
 
-    version: '1.4.0'
+    /** 打开 / 关闭使用说明 */
+    openHelp: function () { Help.open(); },
+    closeHelp: function () { Help.close(); },
+
+    /** 打开 / 关闭设置面板 */
+    openSettings: function () { SettingsPanel.open(); },
+    closeSettings: function () { SettingsPanel.close(); },
+
+    /** 当前设置（只读快照） */
+    getSettings: function () { return JSON.parse(JSON.stringify(Settings.data)); },
+
+    /** 改设置；返回改完之后的设置快照 */
+    setSettings: function (patch) {
+      if (patch && typeof patch === 'object') Settings.set(patch, true);
+      return JSON.parse(JSON.stringify(Settings.data));
+    },
+
+    /** 数学键盘：在光标处插入一段数学写法（供外部调用与自动化测试） */
+    insertMath: function (text) {
+      var target = keypadTarget();
+      if (!target) return false;
+      insertAtCaret(target, String(text || ''), 0);
+      return true;
+    },
+
+    version: '1.4.1'
   };
 
   /* ================= 桌面版菜单事件 ================= */

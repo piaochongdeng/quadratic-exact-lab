@@ -244,7 +244,10 @@
           i++;
         }
         if (!para.length) { para.push(lines[i]); i++; }
-        out.push('<p class="md-p">' + restore(inline(para.join('\n'), store), store).replace(/\n/g, '<br>') + '</p>');
+        /* 先换行、再还原公式：KaTeX 输出的 HTML（尤其是拉长的根号 SVG）自带换行，
+           还原之后再替换换行符会把 <br> 塞进 <path d="..."> 里，
+           浏览器就会报「Expected path command」。 */
+        out.push('<p class="md-p">' + restore(inline(para.join('\n'), store).replace(/\n/g, '<br>'), store) + '</p>');
       }
 
       return out.join('\n');

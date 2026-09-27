@@ -1,9 +1,11 @@
-﻿/*!
+/*!
  * quadratic-exact-lab · engine.js  (v1.0.0)
  * ------------------------------------------------------------------
  * 精确二次函数计算引擎
  *   · Frac   —— 任意精度有理数（基于 BigInt，自动约分）
- *   · Surd   —— 二次根式 a + b·√rad（a、b 为有理数，rad 无平方因子）
+ *   · Surd   —— 精确根式数：有理数 × 若干无平方因子根号 的和
+ *               （a + b√2 + c√3 + …，四则运算与判号全部精确）
+ *   · parseExact —— 数值表达式解析：√2、-√3、2√3、(1+√3)/2、sqrt(2)、2^3 …
  *   · Quad   —— 二次函数三种形式的互化、顶点、判别式、零点
  *   · analyzeDomain —— 任意定义域上的最值 / 值域分析
  * 纯原创实现，零第三方依赖，浏览器与 Node.js 通用。
@@ -69,10 +71,12 @@
       throw new Error('无法转换为有理数：' + String(x));
     }
 
-    add(o) { o = Frac.of(o); return new Frac(this.n * o.d + o.n * this.d, this.d * o.d); }
-    sub(o) { o = Frac.of(o); return new Frac(this.n * o.d - o.n * this.d, this.d * o.d); }
-    mul(o) { o = Frac.of(o); return new Frac(this.n * o.n, this.d * o.d); }
+    /* 与根式混算时交给 Surd：有理数 + √2 之类必须走精确根式层 */
+    add(o) { if (o instanceof Surd) return Surd.of(this).add(o); o = Frac.of(o); return new Frac(this.n * o.d + o.n * this.d, this.d * o.d); }
+    sub(o) { if (o instanceof Surd) return Surd.of(this).sub(o); o = Frac.of(o); return new Frac(this.n * o.d - o.n * this.d, this.d * o.d); }
+    mul(o) { if (o instanceof Surd) return Surd.of(this).mul(o); o = Frac.of(o); return new Frac(this.n * o.n, this.d * o.d); }
     div(o) {
+      if (o instanceof Surd) return Surd.of(this).div(o);
       o = Frac.of(o);
       if (o.n === 0n) throw new Error('除数不能为 0');
       return new Frac(this.n * o.d, this.d * o.n);
@@ -85,6 +89,7 @@
     isInt() { return this.d === 1n; }
     isOne() { return this.n === 1n && this.d === 1n; }
     cmp(o) {
+      if (o instanceof Surd) return Surd.of(this).sub(o).sign();
       o = Frac.of(o);
       var l = this.n * o.d, r = o.n * this.d;
       return l < r ? -1 : (l > r ? 1 : 0);
@@ -107,6 +112,11 @@
       else if (ch === '．') out += '.';
       else if (ch === '，' || ch === ',') out += '';
       else if (ch === '　') out += ' ';
+      else if (ch === '×' || ch === '✕' || ch === '＊' || ch === '·' || ch === '⋅') out += '*';
+      else if (ch === '÷' || ch === '∕') out += '/';
+      else if (ch === '（') out += '(';
+      else if (ch === '）') out += ')';
+      else if (ch === '＾') out += '^';
       else out += ch;
     }
     return out;
@@ -148,40 +158,212 @@
   }
 
   /* ==========================================================
-   * 2. Surd —— 二次根式 a + b√rad
+   * 1.5 数值表达式解析 —— 让输入框可以直接写根号
+   *
+   *   √2      -√3      2√3      3/2√5      (1+√3)/2     √(9/2)
+   *   sqrt(2)  2√3+√5   -3√5/2    2^3        (1+√2)(1-√2)
+   *
+   *   · 支持 + − × ÷ ^ 与圆括号，乘号可以省略（2√3、3(1+√2)、√2√3）
+   *   · 结果落在 Q(√p₁, …, √pₘ) 内，全程精确，绝不落到浮点
+   *   · 化简不出有限根式的写法（例如 √(1+√2)）会给出明确的中文提示
    * ========================================================== */
-  /* 合并加法：一方为有理数时可直接归入另一方的根式域 */
-  function mergeAdd(x, y) {
-    if (x.rad === y.rad) return new Surd(x.a.add(y.a), x.b.add(y.b), x.rad);
-    if (x.isRational()) return new Surd(x.a.add(y.a), y.b, y.rad);
-    if (y.isRational()) return new Surd(x.a.add(y.a), x.b, x.rad);
-    throw new Error('√' + x.rad + ' 与 √' + y.rad + ' 属于不同的根式域，无法直接合并');
+
+  function tokenizeExpr(s) {
+    var out = [], i = 0;
+    while (i < s.length) {
+      var ch = s.charAt(i);
+      if (ch === ' ') { i++; continue; }
+      if ((ch >= '0' && ch <= '9') || ch === '.') {
+        var j = i;
+        while (j < s.length && ((s.charAt(j) >= '0' && s.charAt(j) <= '9') || s.charAt(j) === '.')) j++;
+        out.push({ k: 'num', v: s.slice(i, j) });
+        i = j; continue;
+      }
+      if (s.slice(i, i + 4).toLowerCase() === 'sqrt') { out.push({ k: 'sqrt' }); i += 4; continue; }
+      if (ch === '√') { out.push({ k: 'sqrt' }); i++; continue; }
+      if ('+-*/^'.indexOf(ch) >= 0) { out.push({ k: 'op', v: ch }); i++; continue; }
+      if (ch === '(') { out.push({ k: '(' }); i++; continue; }
+      if (ch === ')') { out.push({ k: ')' }); i++; continue; }
+      throw new Error('看不懂这个符号：' + ch);
+    }
+    return out;
   }
 
-  /* 合并乘法（同理） */
-  function mergeMul(x, y) {
-    if (x.rad === y.rad) {
-      var d = new Frac(x.rad);
-      return new Surd(
-        x.a.mul(y.a).add(x.b.mul(y.b).mul(d)),
-        x.a.mul(y.b).add(x.b.mul(y.a)),
-        x.rad
-      );
+  function parseExact(text) {
+    var s = normalizeChars(String(text === null || text === undefined ? '' : text)).trim();
+    if (s === '') throw new Error('内容是空的');
+    var toks = tokenizeExpr(s);
+    var pos = 0;
+
+    function peek() { return toks[pos]; }
+    function eat(kind) {
+      var t = toks[pos];
+      if (t && t.k === kind) { pos++; return t; }
+      return null;
     }
-    if (x.isRational()) return new Surd(x.a.mul(y.a), x.a.mul(y.b), y.rad);
-    if (y.isRational()) return new Surd(y.a.mul(x.a), y.a.mul(x.b), x.rad);
-    throw new Error('√' + x.rad + ' 与 √' + y.rad + ' 属于不同的根式域，无法直接相乘');
+    /* 省略乘号的判断：下一个记号能起头一个「因子」时才隐含相乘 */
+    function startsFactor(t) {
+      return !!t && (t.k === 'num' || t.k === 'sqrt' || t.k === '(');
+    }
+
+    function parseExpr() {
+      var v = parseTerm();
+      for (;;) {
+        var t = peek();
+        if (t && t.k === 'op' && (t.v === '+' || t.v === '-')) {
+          pos++;
+          var r = parseTerm();
+          v = t.v === '+' ? v.add(r) : v.sub(r);
+        } else break;
+      }
+      return v;
+    }
+
+    function parseTerm() {
+      var v = parseUnary();
+      for (;;) {
+        var t = peek();
+        if (t && t.k === 'op' && (t.v === '*' || t.v === '/')) {
+          pos++;
+          var r = parseUnary();
+          if (t.v === '/') {
+            if (r.sign() === 0) throw new Error('除数不能为 0');
+            v = v.div(r);
+          } else v = v.mul(r);
+        } else if (startsFactor(t)) {
+          v = v.mul(parseUnary());
+        } else break;
+      }
+      return v;
+    }
+
+    function parseUnary() {
+      var t = peek();
+      if (t && t.k === 'op' && (t.v === '+' || t.v === '-')) {
+        pos++;
+        var v = parseUnary();
+        return t.v === '-' ? v.neg() : v;
+      }
+      return parsePower();
+    }
+
+    function parsePower() {
+      var base = parsePrimary();
+      var t = peek();
+      if (t && t.k === 'op' && t.v === '^') {
+        pos++;
+        var e = parseUnary();
+        if (!e.isRational()) throw new Error('指数必须是具体的数');
+        var num = e.a.n, den = e.a.d;
+        if (den !== 1n) {
+          if (num === 1n && den === 2n) return Surd.sqrtOf(base);   /* 1/2 次方就是开平方 */
+          throw new Error('指数 ' + plainExact(e) + ' 开不尽，本工具只支持整数与 1/2 次方');
+        }
+        var n = Number(num);
+        if (n > 64 || n < -64) throw new Error('指数太大了（绝对值最多 64）');
+        var acc = Surd.one();
+        for (var i = 0; i < Math.abs(n); i++) acc = acc.mul(base);
+        if (n < 0) {
+          if (acc.sign() === 0) throw new Error('0 不能作负数次方');
+          acc = acc.inv();
+        }
+        return acc;
+      }
+      return base;
+    }
+
+    function parsePrimary() {
+      var t = peek();
+      if (!t) throw new Error('算式在这里就结束了');
+      if (t.k === 'num') {
+        pos++;
+        return Surd.rational(decimalToFrac(t.v));
+      }
+      if (t.k === 'sqrt') {
+        pos++;
+        /* √ 只吃掉紧跟其后的那一项：√2√3 = √2·√3，√2^2 = (√2)² */
+        return Surd.sqrtOf(parsePrimary());
+      }
+      if (t.k === '(') {
+        pos++;
+        var inner = parseExpr();
+        if (!eat(')')) throw new Error('括号没有配对（少了右括号）');
+        return inner;
+      }
+      throw new Error('算式里出现了意外的符号');
+    }
+
+    var val = parseExpr();
+    if (pos < toks.length) throw new Error('算式后面还有没读懂的内容：' + s.slice(pos));
+    return val;
+  }
+
+  /* ==========================================================
+   * 2. Surd —— 精确根式数：有理数 × 若干无平方因子根号 的和
+   *
+   *   内部表示：Map<'无平方因子整数', Frac>，'1' 存放有理部分。
+   *   例如  1 + 2√3 − √5  →  { '1': 1, '3': 2, '5': −1 }
+   *
+   *   加、减、乘、除、比较、判号全部精确，不借助任何浮点误差。
+   *   · 单根式 a + b√d ：O(1) 的精确判号（平方比较）
+   *   · 多根式        ：自适应精度的整数区间法，精度不够就加倍重算
+   *   旧接口 new Surd(a, b, rad) 与 .a / .b / .rad 仍然可用，
+   *   单根式场景下行为与 v1 完全一致。
+   * ========================================================== */
+
+  /* 正整数 → k²·s（s 无平方因子），即 √n = k·√s */
+  function squarefreeSplit(n) {
+    if (n <= 0n) throw new Error('根号内必须是正整数');
+    var k = 1n, s = n, i = 2n, LIMIT = 1000000n;
+    while (i * i <= s && i <= LIMIT) {
+      while (s % (i * i) === 0n) { s = s / (i * i); k = k * i; }
+      i += 1n;
+    }
+    if (s > 1n) {
+      var r = bigSqrt(s);
+      if (r * r === s) { k = k * r; s = 1n; }
+    }
+    return { k: k, s: s };
+  }
+
+  /* 无平方因子正整数的质因数列表（求范数时用） */
+  function primeFactorsOf(n) {
+    var out = [], m = n, i = 2n, LIMIT = 1000000n;
+    while (i * i <= m && i <= LIMIT) {
+      if (m % i === 0n) { out.push(i); while (m % i === 0n) m = m / i; }
+      i += 1n;
+    }
+    if (m > 1n) out.push(m);
+    return out;
   }
 
   class Surd {
+    /* 兼容旧写法：new Surd(a, b, rad) 表示 a + b·√rad */
     constructor(a, b, rad) {
-      a = a === undefined ? new Frac(0n) : Frac.of(a);
-      b = b === undefined ? new Frac(0n) : Frac.of(b);
-      rad = rad === undefined ? 1n : (typeof rad === 'bigint' ? rad : BigInt(rad));
-      if (b.isZero()) rad = 1n;
-      if (rad <= 0n) throw new Error('根号内必须是正整数');
-      if (rad === 1n) { a = a.add(b); b = new Frac(0n); }
-      this.a = a; this.b = b; this.rad = rad;
+      this.t = new Map();
+      var aa = (a === undefined) ? new Frac(0n) : Frac.of(a);
+      if (aa.n !== 0n) this.t.set('1', aa);
+      var bb = (b === undefined) ? new Frac(0n) : Frac.of(b);
+      if (bb.n !== 0n) {
+        var rr = (rad === undefined) ? 1n : (typeof rad === 'bigint' ? rad : BigInt(rad));
+        var sp = squarefreeSplit(rr);
+        this._bump(sp.s === 1n ? '1' : String(sp.s), bb.mul(new Frac(sp.k)));
+      }
+    }
+
+    /* 直接用一个 Map 造对象（内部用，跳过规范化检查） */
+    static _make(map) {
+      var s = Object.create(Surd.prototype);
+      s.t = map;
+      return s;
+    }
+
+    /* 累加一项；系数变成 0 就把这一项删掉，保证「零值 ⟺ 空表」 */
+    _bump(key, c) {
+      if (c.n === 0n) return;
+      var cur = this.t.get(key);
+      var v = cur ? cur.add(c) : c;
+      if (v.n === 0n) this.t.delete(key); else this.t.set(key, v);
     }
 
     static of(x) {
@@ -194,65 +376,222 @@
     }
 
     static rational(f) { return new Surd(Frac.of(f), new Frac(0n), 1n); }
-    static zero() { return new Surd(new Frac(0n), new Frac(0n), 1n); }
+    static zero() { return new Surd(); }
     static one() { return new Surd(new Frac(1n), new Frac(0n), 1n); }
+
+    /* ---------- 结构访问 ---------- */
+
+    /* [ { d: 无平方因子整数, c: 有理系数 }, ... ]，按 d 升序 */
+    radicals() {
+      var out = [];
+      this.t.forEach(function (c, k) {
+        if (k !== '1') out.push({ d: BigInt(k), c: c });
+      });
+      out.sort(function (p, q) { return p.d < q.d ? -1 : (p.d > q.d ? 1 : 0); });
+      return out;
+    }
+
+    get a() { var r = this.t.get('1'); return r === undefined ? new Frac(0n) : r; }
+    get rad() { var r = this.radicals(); return r.length ? r[0].d : 1n; }
+    get b() { var r = this.radicals(); return r.length ? r[0].c : new Frac(0n); }
+
+    termCount() { return this.t.size; }
+    isRational() { return this.radicals().length === 0; }
+    isZero() { return this.t.size === 0; }
+    isInt() { return this.isRational() && this.a.isInt(); }
+    isOne() { return this.isRational() && this.a.isOne(); }
+    isNegOne() { return this.isRational() && this.a.n === -1n && this.a.d === 1n; }
+
+    /* ---------- 四则运算 ---------- */
+
+    add(o) {
+      o = Surd.of(o);
+      if (this.t.size === 0) return o;
+      if (o.t.size === 0) return this;
+      var r = Surd._make(new Map(this.t));
+      o.t.forEach(function (c, k) { r._bump(k, c); });
+      return r;
+    }
+    sub(o) { return this.add(Surd.of(o).neg()); }
+
+    neg() {
+      var m = new Map();
+      this.t.forEach(function (c, k) { m.set(k, c.neg()); });
+      return Surd._make(m);
+    }
+
+    /* 乘以一个有理数 */
+    _scale(f) {
+      f = Frac.of(f);
+      if (f.n === 0n) return Surd.zero();
+      var m = new Map();
+      this.t.forEach(function (c, k) { m.set(k, c.mul(f)); });
+      return Surd._make(m);
+    }
+
+    mul(o) {
+      o = Surd.of(o);
+      if (this.t.size === 0 || o.t.size === 0) return Surd.zero();
+      if (this.isRational()) return o._scale(this.a);
+      if (o.isRational()) return this._scale(o.a);
+      var r = Surd._make(new Map());
+      this.t.forEach(function (c1, k1) {
+        o.t.forEach(function (c2, k2) {
+          var c = c1.mul(c2);
+          if (c.n === 0n) return;
+          var sp = squarefreeSplit(BigInt(k1) * BigInt(k2));
+          r._bump(sp.s === 1n ? '1' : String(sp.s), c.mul(new Frac(sp.k)));
+        });
+      });
+      return r;
+    }
+
+    /*
+     * 倒数。域 Q(√p₁, …, √pₘ) 上，全体共轭之积就是范数（有理数），
+     * 于是 x⁻¹ = (∏_{σ≠id} σ(x)) / N(x)，全程精确。
+     */
+    inv() {
+      if (this.t.size === 0) throw new Error('除数不能为 0');
+      if (this.isRational()) return Surd.rational(this.a.inv());
+
+      var primes = [], signOf = new Map();
+      this.radicals().forEach(function (r) {
+        var fs = primeFactorsOf(r.d);
+        signOf.set(String(r.d), fs);
+        fs.forEach(function (p) { if (primes.indexOf(p) < 0) primes.push(p); });
+      });
+      if (primes.length > 8) {
+        throw new Error('分母里有 ' + primes.length + ' 个不同的根号质因数，无法精确求倒数');
+      }
+
+      var norm = Surd.one(), num = Surd.one();
+      for (var mask = 0; mask < (1 << primes.length); mask++) {
+        var conj = this._conjugate(primes, mask, signOf);
+        norm = norm.mul(conj);
+        if (mask !== 0) num = num.mul(conj);
+      }
+      if (!norm.isRational() || norm.isZero()) {
+        throw new Error('无法精确求出 ' + plainExact(this) + ' 的倒数');
+      }
+      return num._scale(norm.a.inv());
+    }
+
+    /* 把每个 √d 里的质因子按 mask 取反符号，得到一个共轭 */
+    _conjugate(primes, mask, signOf) {
+      var m = new Map();
+      this.t.forEach(function (c, k) {
+        if (k === '1') { m.set('1', c); return; }
+        var flips = 0;
+        signOf.get(k).forEach(function (p) {
+          var idx = primes.indexOf(p);
+          if (idx >= 0 && (mask & (1 << idx))) flips++;
+        });
+        m.set(k, (flips % 2) ? c.neg() : c);
+      });
+      return Surd._make(m);
+    }
+
+    div(o) { return this.mul(Surd.of(o).inv()); }
+    abs() { return this.sign() < 0 ? this.neg() : this; }
+
+    /* ---------- 判号与比较 ---------- */
+
+    sign() {
+      if (this.t.size === 0) return 0;
+      if (this.isRational()) return this.a.sign();
+      var rs = this.radicals();
+      if (rs.length === 1) {
+        /* a + b√d：与 0 比较，在 a、b 异号时等价于比较 a² 与 b²d */
+        var a = this.a, b = rs[0].c, d = rs[0].d;
+        if (a.isZero()) return b.sign();
+        var sa = a.sign(), sb = b.sign();
+        if (sa === sb) return sa;
+        var c = a.mul(a).cmp(b.mul(b).mul(new Frac(d)));
+        return c === 0 ? 0 : (c > 0 ? sa : sb);
+      }
+      return this._signByInterval();
+    }
+
+    /*
+     * 多项根式和的自适应判号。
+     * 用整数开方给出 √d 的严格误差上界，累加后若 |近似值| 超过误差界，
+     * 符号就确定了；否则把十进制位数加倍重算。非零代数数有正的下界，
+     * 所以这个过程必定终止（这里再设一个上限兜底）。
+     */
+    _signByInterval() {
+      var rs = this.radicals();
+      var rational = this.a;
+      var P = 25;
+      for (var round = 0; round < 14; round++) {
+        var scale = bigPow10(P);
+        var D = 1n;
+        D = D / bigGcd(D, rational.d) * rational.d;
+        rs.forEach(function (r) { D = D / bigGcd(D, r.c.d) * r.c.d; });
+        var num = rational.n * (D / rational.d) * scale;
+        var err = 0n;
+        rs.forEach(function (r) {
+          var m = D / r.c.d;
+          num += r.c.n * m * bigSqrt(r.d * scale * scale);
+          err += bigAbs(r.c.n * m);
+        });
+        if (num > err) return 1;
+        if (num < -err) return -1;
+        P = P * 2;
+      }
+      throw new Error('无法精确判定 ' + plainExact(this) + ' 的正负（精度上限已到）');
+    }
+
+    cmp(o) { return this.sub(o).sign(); }
+    eq(o) { return this.cmp(o) === 0; }
+
+    toNumber() {
+      var v = this.a.toNumber();
+      this.radicals().forEach(function (r) { v += r.c.toNumber() * Math.sqrt(Number(r.d)); });
+      return v;
+    }
+    toString() { return plainExact(this); }
+
+    /* ---------- 开方 ---------- */
 
     /* √(n/d) = √(n·d)/d ，再提出平方因子 */
     static sqrtOfFrac(f) {
       f = Frac.of(f);
       if (f.sign() < 0) throw new Error('实数范围内负数不能开平方');
       if (f.isZero()) return Surd.zero();
-      var m = f.n * f.d;
-      var k = 1n, s = m;
-      var LIMIT = 2000000n;
-      var i = 2n;
-      while (i * i <= s && i <= LIMIT) {
-        while (s % (i * i) === 0n) { s = s / (i * i); k = k * i; }
-        i += 1n;
-      }
-      if (s > 1n) {
-        var r = bigSqrt(s);
-        if (r * r === s) { k = k * r; s = 1n; }
-      }
-      return new Surd(new Frac(0n), new Frac(k, f.d), s);
+      var sp = squarefreeSplit(f.n * f.d);
+      return new Surd(new Frac(0n), new Frac(sp.k, f.d), sp.s);
     }
 
-    isRational() { return this.b.isZero(); }
-    isZero() { return this.a.isZero() && this.b.isZero(); }
-
-    add(o) { return mergeAdd(this, Surd.of(o)); }
-    sub(o) { return this.add(Surd.of(o).neg()); }
-    neg() { return new Surd(this.a.neg(), this.b.neg(), this.rad); }
-
-    mul(o) { return mergeMul(this, Surd.of(o)); }
-
-    /* 1/(a+b√d) = (a-b√d)/(a²-b²d) */
-    inv() {
-      if (this.isZero()) throw new Error('除数不能为 0');
-      var d = new Frac(this.rad);
-      var den = this.a.mul(this.a).sub(this.b.mul(this.b).mul(d));
-      if (den.isZero()) throw new Error('该根式的分母为 0');
-      return new Surd(this.a.div(den), this.b.neg().div(den), this.rad);
+    /* 有理数开方；开不尽就返回 null */
+    static isqrtOfRational(f) {
+      f = Frac.of(f);
+      if (f.sign() < 0) return null;
+      var s = Surd.sqrtOfFrac(f);
+      return s.isRational() ? s.a : null;
     }
-    div(o) { return this.mul(Surd.of(o).inv()); }
 
-    /* 精确判号：不借助任何浮点运算 */
-    sign() {
-      if (this.b.isZero()) return this.a.sign();
-      if (this.a.isZero()) return this.b.sign();
-      var sa = this.a.sign(), sb = this.b.sign();
-      if (sa === sb) return sa;
-      var lhs = this.a.mul(this.a);
-      var rhs = this.b.mul(this.b).mul(new Frac(this.rad));
-      var c = lhs.cmp(rhs);
-      if (c === 0) return 0;
-      return c > 0 ? sa : sb;
+    /*
+     * √x。有理数直接化简；a + b√d 用经典的「去嵌套根号」公式
+     *   √(a + b√d) = √((a+r)/2) + sgn(b)·√((a−r)/2)，其中 r = √(a² − b²d)
+     * 只要 r 是有理数、且 (a±r)/2 不是负数，结果就是有限个根式；
+     * 否则抛错，由调用方决定怎么兜底。
+     */
+    static sqrtOf(x) {
+      x = Surd.of(x);
+      if (x.isRational()) return Surd.sqrtOfFrac(x.a);
+      var rs = x.radicals();
+      var name = plainExact(x);
+      if (rs.length !== 1) throw new Error('√(' + name + ') 不能写成有限根式');
+      var a = x.a, b = rs[0].c, d = rs[0].d;
+      var disc = a.mul(a).sub(b.mul(b).mul(new Frac(d)));
+      if (disc.sign() < 0) throw new Error('√(' + name + ') 不能写成有限根式');
+      var r = Surd.sqrtOfFrac(disc);
+      if (!r.isRational()) throw new Error('√(' + name + ') 不能写成有限根式');
+      var half = r.a.div(new Frac(2n));
+      var p = Surd.sqrtOfFrac(a.div(new Frac(2n)).add(half));
+      var q = Surd.sqrtOfFrac(a.div(new Frac(2n)).sub(half));
+      return b.sign() < 0 ? p.sub(q) : p.add(q);
     }
-    cmp(o) { return this.sub(o).sign(); }
-    eq(o) { return this.cmp(o) === 0; }
-    abs() { return this.sign() < 0 ? this.neg() : this; }
-    toNumber() { return this.a.toNumber() + this.b.toNumber() * Math.sqrt(Number(this.rad)); }
-    toString() { return plainExact(this); }
   }
 
   /* ==========================================================
@@ -260,7 +599,19 @@
    * ========================================================== */
   function toSurd(x) {
     if (x instanceof Surd) return x;
-    return new Surd(Frac.of(x), new Frac(0n), 1n);
+    return Surd.of(x);
+  }
+
+  /*
+   * 把一个数收敛到「最窄的类型」：
+   *   有理数 → Frac（v1 的老代码路径原样保留，行为完全不变）
+   *   带根号 → Surd
+   * 这样只有真正输入了 √ 的地方才会走进根式运算。
+   */
+  function numOf(x) {
+    if (x instanceof Surd) return x.isRational() ? x.a : x;
+    if (x instanceof Frac) return x;
+    return Frac.of(x);
   }
 
   function texFracMag(f) {
@@ -281,26 +632,6 @@
     if (b.n === 1n) return '\\frac{' + root + '}{' + b.d + '}';
     return '\\frac{' + b.n + root + '}{' + b.d + '}';
   }
-  function texExact(x) {
-    var s = toSurd(x);
-    if (s.isRational()) return texFracSigned(s.a);
-    var radPart = texRadicalMag(s.b, s.rad);
-    var bs = s.b.sign();
-    if (s.a.isZero()) return (bs < 0 ? '-' : '') + radPart;
-    if (bs < 0) return texFracSigned(s.a) + ' - ' + radPart;
-    if (s.a.sign() > 0) return texFracSigned(s.a) + ' + ' + radPart;
-    return radPart + ' - ' + texFracMag(s.a);
-  }
-  function texExactMag(x) {
-    var s = toSurd(x);
-    return s.sign() < 0 ? texExact(s.neg()) : texExact(s);
-  }
-  function texExactParen(x) {
-    var s = toSurd(x);
-    if (s.isRational() && s.a.sign() >= 0) return texExact(s);
-    return '(' + texExact(s) + ')';
-  }
-
   function plainFracMag(f) {
     f = Frac.of(f).abs();
     return f.d === 1n ? String(f.n) : f.n + '/' + f.d;
@@ -317,15 +648,66 @@
     if (b.d === 1n) return (b.n === 1n ? '' : String(b.n)) + root;
     return '(' + b.n + '/' + b.d + ')' + root;
   }
+
+  /* 多根式求和式的排版：把每一项按「+ / −」串起来 */
+  function joinTerms(s, fracSigned, radicalMag) {
+    var out = '';
+    if (!s.a.isZero()) out = fracSigned(s.a);
+    s.radicals().forEach(function (r) {
+      var neg = r.c.sign() < 0;
+      var part = radicalMag(neg ? r.c.neg() : r.c, r.d);
+      if (out === '') out = (neg ? '-' : '') + part;
+      else out += (neg ? ' - ' : ' + ') + part;
+    });
+    return out;
+  }
+
+  /* 作为系数使用时要不要加括号：1 + √2 要，√3 不用 */
+  function needsParens(c) {
+    c = toSurd(c);
+    if (c.termCount() > 1) return true;
+    return !c.isRational() && !c.a.isZero();
+  }
+
+  function texExact(x) {
+    var s = toSurd(x);
+    if (s.isRational()) return texFracSigned(s.a);
+    var rs = s.radicals();
+    if (rs.length === 1) {
+      /* 单根式沿用 v1 的排版：a < 0 且 b > 0 时把根号项写在前面 */
+      var radPart = texRadicalMag(rs[0].c, rs[0].d);
+      var bs = rs[0].c.sign();
+      if (s.a.isZero()) return (bs < 0 ? '-' : '') + radPart;
+      if (bs < 0) return texFracSigned(s.a) + ' - ' + radPart;
+      if (s.a.sign() > 0) return texFracSigned(s.a) + ' + ' + radPart;
+      return radPart + ' - ' + texFracMag(s.a);
+    }
+    return joinTerms(s, texFracSigned, texRadicalMag);
+  }
+  function texExactMag(x) {
+    var s = toSurd(x);
+    return s.sign() < 0 ? texExact(s.neg()) : texExact(s);
+  }
+  function texExactParen(x) {
+    var s = toSurd(x);
+    if (s.isRational() && s.a.sign() >= 0) return texExact(s);
+    if (s.termCount() === 1 && s.a.isZero() && s.sign() > 0) return texExact(s);   /* 单纯一个正根号不用加括号 */
+    return '(' + texExact(s) + ')';
+  }
+
   function plainExact(x) {
     var s = toSurd(x);
     if (s.isRational()) return plainFracSigned(s.a);
-    var radPart = plainRadicalMag(s.b, s.rad);
-    var bs = s.b.sign();
-    if (s.a.isZero()) return (bs < 0 ? '-' : '') + radPart;
-    if (bs < 0) return plainFracSigned(s.a) + ' - ' + radPart;
-    if (s.a.sign() > 0) return plainFracSigned(s.a) + ' + ' + radPart;
-    return radPart + ' - ' + plainFracMag(s.a);
+    var rs = s.radicals();
+    if (rs.length === 1) {
+      var radPart = plainRadicalMag(rs[0].c, rs[0].d);
+      var bs = rs[0].c.sign();
+      if (s.a.isZero()) return (bs < 0 ? '-' : '') + radPart;
+      if (bs < 0) return plainFracSigned(s.a) + ' - ' + radPart;
+      if (s.a.sign() > 0) return plainFracSigned(s.a) + ' + ' + radPart;
+      return radPart + ' - ' + plainFracMag(s.a);
+    }
+    return joinTerms(s, plainFracSigned, plainRadicalMag);
   }
 
   /* 多项式排版：terms = [{c: 精确数, p: 次数}, ...] */
@@ -341,9 +723,8 @@
       var mag = negative ? c.neg() : c;
       var varPart = p > 0 ? (p === 1 ? v : v + '^{' + p + '}') : '';
       var coefPart = '';
-      var isOne = mag.isRational() && mag.a.n === 1n && mag.a.d === 1n;
-      if (!(isOne && p > 0)) coefPart = texExact(mag);
-      if (coefPart && varPart && !mag.isRational() && !mag.a.isZero()) coefPart = '(' + coefPart + ')';
+      if (!(mag.isOne() && p > 0)) coefPart = texExact(mag);
+      if (coefPart && varPart && needsParens(mag)) coefPart = '(' + coefPart + ')';
       var body = coefPart + varPart || '1';
       out += idx === 0 ? (negative ? '-' : '') + body : (negative ? ' - ' : ' + ') + body;
     });
@@ -362,9 +743,8 @@
       var mag = negative ? c.neg() : c;
       var varPart = p > 0 ? (p === 1 ? v : v + '^' + p) : '';
       var coefPart = '';
-      var isOne = mag.isRational() && mag.a.n === 1n && mag.a.d === 1n;
-      if (!(isOne && p > 0)) coefPart = plainExact(mag);
-      if (coefPart && varPart && !mag.isRational()) coefPart = '(' + coefPart + ')';
+      if (!(mag.isOne() && p > 0)) coefPart = plainExact(mag);
+      if (coefPart && varPart && needsParens(mag)) coefPart = '(' + coefPart + ')';
       var body = coefPart + varPart || '1';
       out += idx === 0 ? (negative ? '-' : '') + body : (negative ? ' - ' : ' + ') + body;
     });
@@ -375,7 +755,7 @@
   function texVertexForm(a, h, k, v) {
     v = v || 'x';
     var an = toSurd(a), neg = an.sign() < 0, amag = neg ? an.neg() : an;
-    var isOne = amag.isRational() && amag.a.n === 1n && amag.a.d === 1n;
+    var isOne = amag.isOne();
     var head = '';
     if (!isOne) {
       head = texExact(amag);
@@ -395,7 +775,7 @@
   function texFactoredForm(a, r1, r2, v) {
     v = v || 'x';
     var an = toSurd(a), neg = an.sign() < 0, amag = neg ? an.neg() : an;
-    var isOne = amag.isRational() && amag.a.n === 1n && amag.a.d === 1n;
+    var isOne = amag.isOne();
     var head = '';
     if (!isOne) {
       head = texExact(amag);
@@ -403,8 +783,11 @@
     }
     function factor(r) {
       var s = toSurd(r);
-      if (s.sign() < 0) return '(' + v + ' + ' + texExact(s.neg()) + ')';
-      return '(' + v + ' - ' + texExact(s) + ')';
+      var body = s.sign() < 0 ? texExact(s.neg()) : texExact(s);
+      var sign = s.sign() < 0 ? ' + ' : ' - ';
+      /* 根本身带加减号时必须再括一层，否则 "x - 2 + \sqrt{3}" 会被读成 "(x-2)+√3" */
+      if (s.termCount() > 1) body = '(' + body + ')';
+      return '(' + v + sign + body + ')';
     }
     return (neg ? '-' : '') + head + factor(r1) + factor(r2);
   }
@@ -412,7 +795,7 @@
   function plainVertexForm(a, h, k, v) {
     v = v || 'x';
     var an = toSurd(a), neg = an.sign() < 0, amag = neg ? an.neg() : an;
-    var isOne = amag.isRational() && amag.a.n === 1n && amag.a.d === 1n;
+    var isOne = amag.isOne();
     var head = '';
     if (!isOne) { head = plainExact(amag); if (!amag.isRational()) head = '(' + head + ')'; }
     var hs = toSurd(h);
@@ -426,32 +809,38 @@
   function plainFactoredForm(a, r1, r2, v) {
     v = v || 'x';
     var an = toSurd(a), neg = an.sign() < 0, amag = neg ? an.neg() : an;
-    var isOne = amag.isRational() && amag.a.n === 1n && amag.a.d === 1n;
+    var isOne = amag.isOne();
     var head = '';
     if (!isOne) { head = plainExact(amag); if (!amag.isRational()) head = '(' + head + ')'; }
     function factor(r) {
       var s = toSurd(r);
-      if (s.sign() < 0) return '(' + v + ' + ' + plainExact(s.neg()) + ')';
-      return '(' + v + ' - ' + plainExact(s) + ')';
+      var body = s.sign() < 0 ? plainExact(s.neg()) : plainExact(s);
+      var sign = s.sign() < 0 ? ' + ' : ' - ';
+      /* 根本身带加减号时必须再括一层，否则 "x - 2 + √3" 会被读成 "(x-2)+√3" */
+      if (s.termCount() > 1) body = '(' + body + ')';
+      return '(' + v + sign + body + ')';
     }
     return (neg ? '-' : '') + head + factor(r1) + factor(r2);
   }
 
   /* 最简根式（不带过程）：√280 → 2\sqrt{70}；完全平方 → 整数 */
   function texSqrtSimplest(f) {
-    f = Frac.of(f);
+    f = toSurd(f);
     if (f.sign() < 0) return '\\sqrt{' + texExact(f) + '}';
     if (f.isZero()) return '0';
-    return texExact(Surd.sqrtOfFrac(f));
+    try { return texExact(Surd.sqrtOf(f)); }
+    catch (e) { return '\\sqrt{' + texExact(f) + '}'; }
   }
 
   /* 最简根式（带化简过程）：√280 → "\sqrt{280} = 2\sqrt{70}"；已最简时只返回根式本身 */
   function texSqrtChain(f) {
-    f = Frac.of(f);
+    f = toSurd(f);
     if (f.sign() < 0) return '\\sqrt{' + texExact(f) + '}';
     if (f.isZero()) return '0';
     var raw = '\\sqrt{' + texExact(f) + '}';
-    var simp = texExact(Surd.sqrtOfFrac(f));
+    var simp;
+    try { simp = texExact(Surd.sqrtOf(f)); }
+    catch (e) { return raw; }
     return raw === simp ? simp : raw + ' = ' + simp;
   }
 
@@ -471,15 +860,15 @@
    * ========================================================== */
   var Quad = {
     make: function (a, b, c) {
-      a = Frac.of(a); b = Frac.of(b); c = Frac.of(c);
-      if (a.isZero()) throw new Error('二次项系数 a 不能为 0（否则不是二次函数）');
+      a = numOf(a); b = numOf(b); c = numOf(c);
+      if (a.sign() === 0) throw new Error('二次项系数 a 不能为 0（否则不是二次函数）');
       return { a: a, b: b, c: c };
     },
     fromGeneral: function (a, b, c) { return Quad.make(a, b, c); },
 
     /* y = a(x-h)² + k  →  y = ax² + bx + c */
     fromVertex: function (a, h, k) {
-      a = Frac.of(a); h = Frac.of(h); k = Frac.of(k);
+      a = numOf(a); h = numOf(h); k = numOf(k);
       var b = a.mul(h).mul(new Frac(-2n));
       var c = a.mul(h).mul(h).add(k);
       return Quad.make(a, b, c);
@@ -487,7 +876,7 @@
 
     /* y = a(x-x₁)(x-x₂)  →  y = ax² + bx + c */
     fromFactored: function (a, r1, r2) {
-      a = Frac.of(a); r1 = Frac.of(r1); r2 = Frac.of(r2);
+      a = numOf(a); r1 = numOf(r1); r2 = numOf(r2);
       var b = a.mul(r1.add(r2)).neg();
       var c = a.mul(r1).mul(r2);
       return Quad.make(a, b, c);
@@ -507,7 +896,7 @@
      */
     fromPoints: function (p1, p2, p3) {
       var pts = [p1, p2, p3].map(function (p) {
-        return { x: Frac.of(p.x), y: Frac.of(p.y) };
+        return { x: numOf(p.x), y: numOf(p.y) };
       });
       var X = pts.map(function (p) { return p.x; });
       var Y = pts.map(function (p) { return p.y; });
@@ -543,7 +932,7 @@
     },
 
     evalAt: function (q, x) {
-      x = Frac.of(x);
+      x = numOf(x);
       return q.a.mul(x).mul(x).add(q.b.mul(x)).add(q.c);
     },
 
@@ -569,15 +958,20 @@
       var twoA = q.a.mul(new Frac(2n));
       var base = q.b.neg().div(twoA);
       if (D.isZero()) {
-        return { kind: 'double', delta: D, list: [new Surd(base, new Frac(0n), 1n)], base: base };
+        return { kind: 'double', delta: D, list: [Surd.of(base)], base: base };
       }
       if (D.sign() < 0) {
-        var mag = Surd.sqrtOfFrac(D.neg()).div(new Surd(twoA, new Frac(0n), 1n));
+        /* 复根只是「仅供参考」的一行，不能让它连累主结论。
+           Δ = -4√2 这种无理数的绝对值开平方是 √(4√2)，那是无法写成有限根式的双重根式，
+           以前这里会直接抛出异常，于是「Δ < 0，没有实数零点」这个本来很确定的结论反而报不出来。
+           现在改成：虚部算得出来就给精确值，算不出来就留空，由报告换一种说法。 */
+        var mag = null;
+        try { mag = Surd.sqrtOf(D.neg()).div(Surd.of(twoA)); } catch (e) { mag = null; }
         return { kind: 'none', delta: D, list: [], real: base, imag: mag };
       }
-      var root = Surd.sqrtOfFrac(D);
-      var den = new Surd(twoA, new Frac(0n), 1n);
-      var b0 = new Surd(base, new Frac(0n), 1n);
+      var root = Surd.sqrtOf(D);
+      var den = Surd.of(twoA);
+      var b0 = Surd.of(base);
       var half = root.div(den);          /* √Δ / (2a) */
       var r1 = b0.sub(half);             /* -b/(2a) - √Δ/(2a) */
       var r2 = b0.add(half);             /* -b/(2a) + √Δ/(2a) */
@@ -608,8 +1002,8 @@
     var up = q.a.sign() > 0;
     var hasLeft = (m !== null && m !== undefined);
     var hasRight = (n !== null && n !== undefined);
-    m = hasLeft ? Frac.of(m) : null;
-    n = hasRight ? Frac.of(n) : null;
+    m = hasLeft ? numOf(m) : null;
+    n = hasRight ? numOf(n) : null;
     if (hasLeft && hasRight && m.cmp(n) > 0) throw new Error('区间左端点不能大于右端点');
 
     var vertexInside = (!hasLeft || h.cmp(m) >= 0) && (!hasRight || h.cmp(n) <= 0);
@@ -682,7 +1076,9 @@
     Frac: Frac,
     Surd: Surd,
     parseRational: parseRational,
+    parseExact: parseExact,
     toSurd: toSurd,
+    numOf: numOf,
     Quad: Quad,
     analyzeDomain: analyzeDomain,
     tex: {

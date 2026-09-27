@@ -8,6 +8,7 @@ const SUITES = [
   ['report.test.js', '报告生成 + KaTeX 排版校验'],
   ['edge.test.js', '边界用例'],
   ['markdown.test.js', 'Markdown 渲染器'],
+  ['help.test.js', '使用说明（文档同源 / 渲染 / 功能对齐）'],
   ['trig.test.js', '三角函数与直角三角形（精确值 / 反推 / 报告排版）'],
   ['dom-check.js', '页面与脚本 id 一致性'],
   ['desktop.test.js', '桌面版（Electron）端到端'],

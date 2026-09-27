@@ -26,10 +26,10 @@
 | 包名 | `cn.piaochong.quadraticexactlab` |
 | `compileSdk` / `targetSdk` | 35（Android 15） |
 | `minSdk` | 24（Android 7.0） |
-| 版本 | `versionName 1.4.0` / `versionCode 10400` |
+| 版本 | `versionName 1.4.1` / `versionCode 10401` |
 | 依赖 | **无**（不用 AndroidX / AppCompat，纯系统框架） |
 | 权限 | **无** |
-| APK 体积 | 正式包 669 KB / 调试包 715 KB |
+| APK 体积 | 正式包 689 KB / 调试包 751 KB |
 | 签名 | APK Signature Scheme v2，RSA 4096，自签名（见第六节） |
 
 ![Android 版 · 二次函数工作区](img/android-quad.png)
@@ -71,8 +71,8 @@ cd android
 
 | 变体 | 路径 |
 | --- | --- |
-| debug | `android/app/build/outputs/apk/debug/quadratic-exact-lab-1.4.0-debug.apk` |
-| release | `android/app/build/outputs/apk/release/quadratic-exact-lab-1.4.0-release.apk` |
+| debug | `android/app/build/outputs/apk/debug/quadratic-exact-lab-1.4.1-debug.apk` |
+| release | `android/app/build/outputs/apk/release/quadratic-exact-lab-1.4.1-release.apk` |
 
 Windows 上直接跑 `gradlew.bat`；`android/local.properties` 里写好 `sdk.dir=...`，
 或者设好 `ANDROID_HOME` 环境变量。
@@ -83,9 +83,12 @@ Windows 上直接跑 `gradlew.bat`；`android/local.properties` 里写好 `sdk.d
 `scripts/make-www.js` 里硬编码了运行时清单：
 
 ```
-index.html  styles.css  engine.js  report.js  markdown.js  ui.js
+index.html  styles.css  engine.js  report.js  markdown.js  help.js  ui.js
 trig.js  trig-report.js  trig-ui.js  vendor/**
 ```
+
+（`help.js` 是应用内「使用说明」的正文，由 `scripts/make-help.js` 从 `docs/USAGE.md` 生成；
+它是**运行时文件**，必须打进 APK，所以列在清单里、也没有进 `.gitignore`。）
 
 脚本跑完会做一次**兜底体检**：如果 `www/` 里出现 `desktop/`、`tests/`、`node_modules/`
 之类的目录，直接报错退出。最终 `www/` 约 0.77 MB / 32 个文件，其中 0.5 MB 是 KaTeX 字体。
@@ -278,7 +281,7 @@ cd android && ./gradlew assembleDebug && cd ..
 node tests/android.test.js
 
 # 想验签名过的正式包（没有调试端口时会自动降级成 adb 层检查）
-ANDROID_APK=$PWD/android/app/build/outputs/apk/release/quadratic-exact-lab-1.4.0-release.apk \
+ANDROID_APK=$PWD/android/app/build/outputs/apk/release/quadratic-exact-lab-1.4.1-release.apk \
   node tests/android.test.js
 ```
 

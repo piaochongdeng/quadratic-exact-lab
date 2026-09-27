@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · trig-report.js  (v1.3.0)
+ * quadratic-exact-lab · trig-report.js  (v1.4.1)
  * ------------------------------------------------------------------
  * 把「角度 / 函数值 + 一条边」整理成一份完整的 Markdown 解析报告。
  * 纯函数、无副作用；浏览器与 Node.js 通用，因此可以直接单元测试。
@@ -45,10 +45,20 @@
   function parseNum(text, label) {
     var t = str(text);
     if (t === '') throw new Error('「' + label + '」不能为空');
-    try { return E.parseRational(t); }
+    try { return E.numOf(E.parseExact(t)); }
     catch (e) {
-      throw new Error('「' + label + '」无法识别：' + t + '（支持整数、分数如 3/4、小数如 0.75、负数）');
+      throw new Error('「' + label + '」无法识别：' + t +
+        '（支持整数、分数如 3/4、小数如 0.75、负数，以及根号如 √3/2）');
     }
+  }
+
+  /* 角度必须是普通的数：√2 度这种没法查特殊角表，直接讲清楚 */
+  function parseAngle(text, label) {
+    var v = parseNum(text, label);
+    if (v instanceof Surd && !v.isRational()) {
+      throw new Error('「' + label + '」要是普通的数，根号只能用在函数值上（例如 sin θ = √3/2）');
+    }
+    return v;
   }
 
   /* 普通数字按当前精度排版（去掉末尾多余的 0） */
@@ -93,7 +103,7 @@
   }
 
   function surdOf(text) {
-    return new Surd(E.parseRational(text), new Frac(0n), 1n);
+    return E.toSurd(E.numOf(E.parseExact(text)));
   }
 
   /* ================= 主流程 ================= */
@@ -125,9 +135,9 @@
     var angleFrac = null;
     if (mode === 'auto') {
       if (angleText === '') throw new Error('请填写角度（单位：度），例如 30、37.5 或 45/2');
-      angleFrac = parseNum(angleText, '角度');
+      angleFrac = parseAngle(angleText, '角度');
     } else if (angleText !== '') {
-      angleFrac = parseNum(angleText, '角度（可留空）');
+      angleFrac = parseAngle(angleText, '角度（可留空）');
     }
 
     var special = null, halfSpecial = false;
@@ -193,7 +203,7 @@
     var sideGivenTex = '';
     if (sideText !== '') {
       sideGivenTex = sideText;
-      try { if (E.parseRational(sideText)) sideGivenTex = tex.exact(surdOf(sideText)); }
+      try { sideGivenTex = tex.exact(surdOf(sideText)); }
       catch (e) { sideGivenTex = sideText; }
     }
 
@@ -344,8 +354,11 @@
            '还能给出精确的 ' + m('\\cos\\theta = \\frac{4}{5}') + ' 与 ' + m('\\tan\\theta = \\frac{3}{4}') + '。');
       }
     } else if (exactFlag) {
+      /* 输入本身可能就带根号（如 sin θ = √3/2），措辞要说准，别一律叫「有理数」 */
+      var inIsSurd = (userValueFrac instanceof Surd) && !userValueFrac.isRational();
       md('**反推结果**：你输入的 ' + m(FN_TEX[fn] + '\\theta = ' + tex.exact(userValueFrac)) +
-         ' 是有理数，由恒等式 ' + m('\\sin^{2}\\theta + \\cos^{2}\\theta = 1') +
+         (inIsSurd ? ' 是最简根式' : ' 是有理数') +
+         '，由恒等式 ' + m('\\sin^{2}\\theta + \\cos^{2}\\theta = 1') +
          ' 反推出来的另外两个函数值**同样可以精确表示**，已经化成最简根式。');
     } else {
       md('**反推结果**：由你输入的 ' + m(FN_TEX[fn] + '\\theta = ' + tex.exact(userValueFrac)) +
@@ -527,5 +540,5 @@
     };
   }
 
-  return { build: build, version: '1.3.0', clampDigits: clampDigits };
+  return { build: build, version: '1.4.1', clampDigits: clampDigits };
 });

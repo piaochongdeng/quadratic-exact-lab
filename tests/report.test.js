@@ -1,4 +1,4 @@
-﻿/* 报告生成 + LaTeX 合法性自检：node tests/report.test.js */
+/* 报告生成 + LaTeX 合法性自检：node tests/report.test.js */
 'use strict';
 const assert = require('assert');
 const E = require('../engine.js');
@@ -70,11 +70,18 @@ CASES.forEach(function (cs) {
     assert.ok(res.ok, '生成失败：' + res.error);
     const md = res.markdown;
     assert.ok(md.startsWith('# 二次函数精确解析报告'), '缺少标题');
-    ['## 一、已知条件', '## 二、各种形式的互化', '## 三、顶点与对称轴', '## 四、判别式与零点',
-     '## 五、定义域与最值', '## 六、单调性', '## 七、图像特征', '## 八、精确值与近似值对照',
-     '## 九、求解步骤', '## 十、结果检验'].forEach(function (h) {
+    ['## 一、结论速览', '### 1.1 顶点坐标与对称轴', '### 1.2 定义域上的最值与值域', '### 1.3 三种形式的互化',
+     '## 二、已知条件', '## 三、判别式与零点', '## 四、图像特征',
+     '## 五、配方与因式分解详解', '## 六、单调性', '## 七、精确值与近似值对照',
+     '## 八、求解步骤', '## 九、结果检验'].forEach(function (h) {
       assert.ok(md.indexOf(h) >= 0, '缺少章节：' + h);
     });
+    /* 结论必须排在前面：顶点 / 最值 / 三式互化都排在第二章之前 */
+    const at = (h) => md.indexOf(h);
+    assert.ok(at('### 1.1 顶点坐标与对称轴') < at('## 二、已知条件'), '顶点结论应排在最前面');
+    assert.ok(at('### 1.2 定义域上的最值与值域') < at('## 二、已知条件'), '最值结论应排在最前面');
+    assert.ok(at('### 1.3 三种形式的互化') < at('## 二、已知条件'), '三式互化应排在最前面');
+    assert.ok(at('## 二、已知条件') < at('## 五、配方与因式分解详解'), '推导细节应排在结论之后');
     assert.ok(res.data && typeof res.data.a === 'number', '缺少绘图数据');
     // 表格列数一致
     const lines = md.split('\n');
@@ -177,15 +184,33 @@ t('a<0 且定义域在轴右侧：最大值在左端点', function () {
   assert.ok(r.markdown.includes('单调递减'), '应说明单调递减');
 });
 
-console.log('\n[3.5] 互化章节与最简根式');
-t('互化一节被拆成醒目的小节', function () {
+console.log('\n[3.5] 结论速览与最简根式');
+t('结论速览把顶点、最值、三式互化摆在一起', function () {
   const r = Report.build({ form: 'vertex', a: '1/2', h: '3', k: '4' });
   assert.ok(r.ok, r.error);
-  ['### 2.1 三种形式对照', '### 2.2', '### 2.3', '### 2.4'].forEach(function (h) {
-    assert.ok(r.markdown.indexOf(h) >= 0, '缺少小节：' + h);
+  const head = r.markdown.slice(0, r.markdown.indexOf('## 二、已知条件'));
+  assert.ok(head.indexOf('顶点坐标') >= 0, '速览里应有顶点坐标');
+  assert.ok(head.indexOf('对称轴') >= 0, '速览里应有对称轴');
+  assert.ok(head.indexOf('最大值') >= 0 && head.indexOf('最小值') >= 0, '速览里应有区间最值');
+  assert.ok(head.indexOf('值域') >= 0, '速览里应有值域');
+  ['一般式', '顶点式', '交点式'].forEach(function (f) {
+    assert.ok(head.indexOf(f) >= 0, '速览里应有' + f);
   });
-  assert.ok(r.markdown.indexOf('> **一眼看清三种形式') >= 0, '缺少醒目的速览块');
-  assert.ok(/\$\$y = .*\\Longleftrightarrow.*\\Longleftrightarrow/.test(r.markdown), '速览块应并列三种形式');
+  assert.ok(/\$\$y = .*\\Longleftrightarrow.*\\Longleftrightarrow/.test(head), '速览块应并列三种形式');
+  assert.ok(r.markdown.indexOf('### 5.1') > r.markdown.indexOf('## 二、已知条件'), '配方推导应排在速览之后');
+});
+
+t('速览给出的尖端点结论与 data 一致', function () {
+  const r = Report.build({
+    form: 'general', a: '1', b: '-2', c: '3',
+    domain: { mode: 'interval', left: { value: '2', open: false }, right: { value: '4', open: false } }
+  });
+  assert.ok(r.ok, r.error);
+  const head = r.markdown.slice(0, r.markdown.indexOf('## 二、已知条件'));
+  assert.ok(head.indexOf('$y_{\\min} = 3$') >= 0, '速览应给出最小值 3');
+  assert.ok(head.indexOf('$y_{\\max} = 11$') >= 0, '速览应给出最大值 11');
+  assert.strictEqual(r.data.extrema.min.value, 3);
+  assert.strictEqual(r.data.extrema.max.value, 11);
 });
 
 t('三点输入时报告里出现方程组与克莱姆法则', function () {
@@ -234,6 +259,81 @@ t('判别式不是完全平方时，报告展示化简过程', function () {
   assert.ok(r.markdown.indexOf('\\sqrt{280} = 2\\sqrt{70}') >= 0, '缺少 √280 的化简过程');
   assert.ok(r.markdown.indexOf('2\\sqrt{70}') >= 0);
   assert.ok(r.markdown.indexOf('\\sqrt{280}') < 0 || r.markdown.indexOf('\\sqrt{280} = ') >= 0, '不应出现孤立的 √280');
+});
+
+console.log('\n[3.6] 根号输入');
+t('系数里可以写 √2、2√3、(1+√3)/2', function () {
+  const cases = [
+    { input: { form: 'general', a: '√2', b: '-2√2', c: '√2' }, want: { a: '\\sqrt{2}', b: '-2\\sqrt{2}', c: '\\sqrt{2}' } },
+    { input: { form: 'factored', a: '√2', r1: '-1', r2: '3' }, want: { a: '\\sqrt{2}' } },
+    { input: { form: 'factored', a: '(1+√3)/2', r1: '-1', r2: '3' }, want: { a: '\\frac{1}{2} + \\frac{\\sqrt{3}}{2}' } }
+  ];
+  cases.forEach(function (c) {
+    const r = Report.build(c.input);
+    assert.ok(r.ok, JSON.stringify(c.input) + ' → ' + r.error);
+    Object.keys(c.want).forEach(function (k) {
+      const re = new RegExp('\\$' + k + ' = ' + c.want[k].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\$');
+      assert.ok(re.test(r.markdown) || r.markdown.indexOf(c.want[k]) >= 0,
+        '缺少 ' + k + ' = ' + c.want[k]);
+    });
+    /* 绘图数据必须是可用的数字 */
+    assert.ok(Number.isFinite(r.data.a) && Number.isFinite(r.data.b) && Number.isFinite(r.data.c), '绘图数据应为数字');
+  });
+});
+
+t('定义域端点也能写根号', function () {
+  const r = Report.build({
+    form: 'general', a: '1', b: '0', c: '0',
+    domain: { mode: 'interval', left: { value: '-√2', open: false }, right: { value: '√2', open: false } }
+  });
+  assert.ok(r.ok, r.error);
+  assert.ok(r.markdown.indexOf('-\\sqrt{2}') >= 0, '左端点应保留根号');
+  assert.ok(r.markdown.indexOf('$y_{\\max} = 2$') >= 0, '最大值应为 2');
+  assert.strictEqual(r.data.extrema.max.value, 2);
+});
+
+t('根号系数导致零点超出根式范围时给出清楚提示', function () {
+  const r = Report.build({ form: 'general', a: '1', b: '0', c: '-√2' });
+  assert.strictEqual(r.ok, false);
+  assert.ok(/超出了本工具能表示的根式范围/.test(r.error), r.error);
+});
+
+/* v1.4.1 回归：Δ < 0 且 Δ 是无理数时，复根的虚部是 √(4√2) 这种「双重根式」，
+   既约不掉也不该算错。以前这里会连累整份报告失败，于是「没有实数零点」这个
+   本来很确定的结论反而看不到 —— 真机自测就是这么发现的。 */
+t('Δ < 0 且 Δ 为无理数时，仍然给出「没有实数零点」的完整报告', function () {
+  ['√2', '2√3', '√3/2', '√(2/3)'].forEach(function (c) {
+    const r = Report.build({ form: 'general', a: '1', b: '0', c: c });
+    assert.ok(r.ok, 'c = ' + c + ' → ' + r.error);
+    assert.ok(r.markdown.indexOf('< 0$') >= 0, 'c = ' + c + '：没有给出 Δ < 0 的判断');
+    assert.ok(r.markdown.indexOf('没有交点') >= 0, 'c = ' + c + '：没有说明图像与 x 轴没有交点');
+    assert.ok(r.markdown.indexOf('没有实数零点') >= 0, 'c = ' + c + '：没有给出「没有实数零点」的结论');
+    assert.ok(r.markdown.indexOf('不存在交点式') >= 0, 'c = ' + c + '：没有说明不存在交点式');
+    /* 虚部算不出来时不能硬编一个假值，也不能留下 undefined */
+    assert.ok(r.markdown.indexOf('undefined') < 0, 'c = ' + c + '：报告里出现了 undefined');
+    assert.ok(r.data.extrema.min.value > 0, 'c = ' + c + '：最小值应为正数');
+  });
+});
+
+t('Δ < 0 但虚部能写成有限根式时，照旧给出共轭复根的精确值', function () {
+  const r = Report.build({ form: 'general', a: '1', b: '0', c: '2' });
+  assert.ok(r.ok, r.error);
+  assert.ok(r.markdown.indexOf('共轭复根') >= 0, '应给出共轭复根');
+  assert.ok(r.markdown.indexOf('\\sqrt{2}\\,i') >= 0, 'i 前面的系数应为 √2：' + r.markdown.slice(0, 200));
+});
+
+t('「虚部写不出来」的说法本身也要说人话', function () {
+  const r = Report.build({ form: 'general', a: '1', b: '0', c: '√2' });
+  assert.ok(r.ok, r.error);
+  assert.ok(r.markdown.indexOf('无法写成有限根式') >= 0, '应说明虚部无法写成有限根式');
+  assert.ok(r.markdown.indexOf('只讨论实数范围') >= 0, '应说明本工具只讨论实数范围');
+});
+
+t('根号输入的报错看得懂', function () {
+  const r = Report.build({ form: 'general', a: '√', b: '1', c: '1' });
+  assert.strictEqual(r.ok, false);
+  assert.ok(/无法识别/.test(r.error), r.error);
+  assert.ok(/√2/.test(r.error), '提示里应示范怎么写根号：' + r.error);
 });
 
 console.log('\n[4] 错误处理');

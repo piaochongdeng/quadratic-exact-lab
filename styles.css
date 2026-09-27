@@ -931,11 +931,19 @@ input[type="text"].mono { font-family: var(--mono); letter-spacing: 0.2px; }
   .chip { min-height: 56px; }
   .app-footer { padding: 18px 14px 28px; }
   .toast { left: 50%; max-width: calc(100vw - 32px); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+
+  /* 弹窗在手机上铺满，说明正文才够宽 */
+  .modal { padding: 0; align-items: stretch; }
+  .modal-panel { width: 100%; max-height: 100%; height: 100%; border-radius: 0; border: 0; }
+  .modal-head { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
+  .modal-body { padding: 16px 16px calc(28px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* 超窄屏（小屏手机竖屏，如 320~360 px） */
 @media (max-width: 480px) {
   .brand-text h1 { font-size: 16px; }
+  .mk { padding: 0 8px; min-width: 40px; }
+  .math-keys { gap: 5px; padding: 7px; }
   .mode-bar button { font-size: 13px; padding: 0 13px; }
   .plot-wrap { height: 260px; }
 
@@ -950,6 +958,113 @@ input[type="text"].mono { font-family: var(--mono); letter-spacing: 0.2px; }
   .panel-head .view-tabs button { flex: 1 1 0; min-width: 0; }
 }
 
+/* ============ 数学键盘 ============
+   手机数字键盘没有 √ 键，PC 键盘也打不出 √，所以根号一律靠这四个键点出来。
+   键位按使用频率排序：√ 放最左边，最常点。 */
+.math-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card-soft);
+}
+
+.mk {
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 36px;
+  padding: 0 10px;
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.mk:hover { background: var(--accent-soft); border-color: var(--accent); }
+.mk:active { transform: translateY(1px); }
+.mk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 根号和正负号是主按钮，给一点强调 */
+.mk-op { color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
+.mk[data-action="neg"], .mk[data-action="back"] { font-size: 16px; }
+.mk[data-action="clear"] { font-size: 13px; min-width: 52px; }
+
+.mk-tip {
+  flex: 1 1 150px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+/* ============ 设置面板 ============ */
+.opt-row { margin-bottom: 16px; }
+.opt-row:last-of-type { margin-bottom: 4px; }
+.opt-row .field-label { display: block; margin-bottom: 6px; }
+.opt-row .hint { margin: 6px 0 0; font-size: 12px; line-height: 1.7; color: var(--ink-faint); }
+.opt-row .radio-row { margin-bottom: 0; }
+#opt-saved { min-height: 18px; color: var(--green); }
+
+/* ============ 使用说明弹窗 ============ */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal[hidden] { display: none; }
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 23, 28, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.modal-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(880px, 100%);
+  max-height: min(86vh, 900px);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card-soft);
+}
+
+.modal-head h2 { margin: 0; font-size: 16px; font-weight: 650; color: var(--ink); }
+.modal-head-actions { margin-left: auto; display: flex; gap: 8px; }
+.modal-body {
+  padding: 18px 22px 26px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.modal-body > :first-child { margin-top: 0; }
+
 /* ============ 输入方式提示：鼠标 / 键盘 vs 触屏 ============ */
 
 /* 触屏设备（手机、平板、Android 壳）看不到键盘，把快捷键说明收起来，
@@ -961,11 +1076,19 @@ input[type="text"].mono { font-family: var(--mono); letter-spacing: 0.2px; }
   .touch-hint { display: inline; }
 }
 
+/* 触屏上数学键盘是主要输入手段，键位放大到 44px 以上 */
+@media (pointer: coarse) {
+  .mk { min-width: 48px; height: 46px; font-size: 17px; }
+  .mk[data-action="clear"] { min-width: 62px; font-size: 14px; }
+  .mk-tip { flex-basis: 100%; }
+}
+
 /* ============ 打印 ============ */
 @media print {
   :root { --bg: #fff; --card: #fff; --shadow: none; --shadow-sm: none; }
   body { background: #fff; font-size: 12pt; }
   .app-header, .col-left, .app-footer, .view-tabs, .plot-toolbar, .toast, .chips { display: none !important; }
+  .modal { display: none !important; }
   .top-dock { position: static !important; box-shadow: none !important; background: none !important; }
   .mode-bar { display: none !important; }
   .app-grid { display: block; padding: 0; max-width: none; }

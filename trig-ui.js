@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · trig-ui.js  (v1.4.0)
+ * quadratic-exact-lab · trig-ui.js  (v1.4.1)
  * ------------------------------------------------------------------
  * 三角函数工作区的界面逻辑：
  *   · 输入：sin / cos / tan + 角度 或 用户自填的函数值 + 已知的一条边 + 小数精度
@@ -684,7 +684,21 @@
     });
     el.digits.addEventListener('change', function () {
       state.digits = Report.clampDigits(el.digits.value);
-      syncUI(); update();
+      syncUI();
+      /* 写回设置面板，让两个工作区的「小数位数」始终是同一个数 */
+      if (window.QuadLab && window.QuadLab.setSettings) window.QuadLab.setSettings({ decimals: state.digits });
+      update();
+    });
+
+    /* 设置面板里改了「小数位数」，这里跟着走（两个工作区共用一个精度） */
+    document.addEventListener('qel-settings', function (ev) {
+      var d = (ev && ev.detail) || {};
+      if (d.decimals === undefined) return;
+      var n = Report.clampDigits(d.decimals);
+      if (n === state.digits) return;
+      state.digits = n;
+      syncUI();
+      update();
     });
     Array.prototype.forEach.call(el.viewTabs.querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () {
@@ -820,6 +834,12 @@
     var fromHash = readHash();
     if (fromHash) applyState(fromHash);
 
+    /* 精度以设置面板里的「小数位数」为准（没打开过设置就用默认的 4 位） */
+    if (window.QuadLab && window.QuadLab.getSettings) {
+      var st = window.QuadLab.getSettings();
+      if (st && st.decimals !== undefined) state.digits = Report.clampDigits(st.decimals);
+    }
+
     syncUI();
     TriPlot.init($('tri-plot'));
     UnitPlot.init($('unit-plot'));
@@ -868,7 +888,7 @@
         return out.toDataURL('image/png');
       } catch (e) { return null; }
     },
-    version: '1.4.0'
+    version: '1.4.1'
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

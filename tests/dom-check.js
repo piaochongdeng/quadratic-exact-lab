@@ -26,7 +26,10 @@ SCRIPTS.forEach(name => {
 
 /* 检查 HTML 里引用的脚本与样式是否存在 */
 /* 只匹配真正的 src / href 属性，避免把 data-src="..." 当成资源路径 */
-const assets = [...html.matchAll(/(?:^|\s)(?:src|href)="([^"]+)"/g)].map(m => m[1]).filter(p => !/^https?:/.test(p));
+/* 只匹配真正的资源路径：跳过 http(s) 外链与页内锚点（href="#" 不是文件） */
+const assets = [...html.matchAll(/(?:^|\s)(?:src|href)="([^"]+)"/g)]
+  .map(m => m[1])
+  .filter(p => !/^(https?:|#|mailto:)/.test(p));
 assets.forEach(p => {
   const ok = fs.existsSync(p);
   if (!ok) bad++;

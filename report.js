@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * quadratic-exact-lab · report.js  (v1.0.0)
  * ------------------------------------------------------------------
  * 把「已知条件 + 定义域」整理成一份完整的 Markdown 解析报告。
@@ -17,7 +17,12 @@
   'use strict';
 
   var Frac = E.Frac, Quad = E.Quad;
-  var tex = E.tex, approx = E.approx;
+  var tex = E.tex;
+  var approxBase = E.approx;
+
+  /* 报告用的小数位数（设置面板可改；0~8 位） */
+  var DECIMALS = 4;
+  function approx(x) { return approxBase(x, DECIMALS); }
 
   var FORM_NAME = { general: '一般式', vertex: '顶点式', factored: '交点式', points: '三点' };
   var TWO = new Frac(2n), FOUR = new Frac(4n);
@@ -27,9 +32,10 @@
   function parseNum(text, label) {
     var t = (text === null || text === undefined) ? '' : String(text).trim();
     if (t === '') throw new Error('「' + label + '」不能为空');
-    try { return E.parseRational(t); }
+    try { return E.numOf(E.parseExact(t)); }
     catch (err) {
-      throw new Error('「' + label + '」无法识别：' + t + '（支持整数、分数如 3/4、小数如 0.75、负数）');
+      throw new Error('「' + label + '」无法识别：' + t + '（' + err.message +
+        '；支持整数 2、分数 3/4、小数 0.75、根号 √2 或 2√3 或 sqrt(2)、(1+√3)/2）');
     }
   }
 
@@ -59,7 +65,7 @@
 
   /* 把 (x - p) 写成符号安全的形式 */
   function shiftTex(p) {
-    var s = Frac.of(p);
+    var s = E.Surd.of(p);
     if (s.isZero()) return 'x';
     return s.sign() < 0 ? 'x + ' + tex.exact(s.neg()) : 'x - ' + tex.exact(s);
   }
@@ -69,9 +75,9 @@
 
   /* 形如 a(...) 的系数前缀：1 → ''，-1 → '-'，其余按需加括号 */
   function coefPrefix(a) {
-    var c = Frac.of(a);
+    var c = E.Surd.of(a);
     if (c.isOne()) return '';
-    if (c.n === -1n && c.d === 1n) return '-';
+    if (c.isNegOne()) return '-';
     return tex.exact(c);
   }
 
@@ -87,14 +93,21 @@
 
   /* ================= 主流程 ================= */
 
+  /* 任何异常都收敛成 { ok:false, error:... }，界面只负责把这句话显示出来 */
   function build(input) {
     try { return buildInner(input || {}); }
-    catch (err) { return { ok: false, error: err.message }; }
+    catch (err) { return { ok: false, error: (err && err.message) ? err.message : String(err) }; }
   }
 
   function buildInner(input) {
     var form = input.form || 'general';
     if (!FORM_NAME[form]) throw new Error('未知的输入形式：' + form);
+
+    /* ---------- 0. 报告选项 ---------- */
+    var dg = Number(input.decimals);
+    DECIMALS = (isFinite(dg) && dg >= 0 && dg <= 10) ? Math.round(dg) : 4;
+    var detail = input.detail === 'brief' ? 'brief' : 'full';
+    var want = function (s) { return detail === 'full' || s === 'brief'; };
 
     /* ---------- 1. 解析输入 ---------- */
     var q, given, known, givenLine;
@@ -162,7 +175,13 @@
     var v = Quad.vertex(q);
     var h = v.h, k = v.k;
     var D = Quad.discriminant(q);
-    var R = Quad.roots(q);
+    var R;
+    try {
+      R = Quad.roots(q);
+    } catch (e) {
+      throw new Error('这个函数的零点超出了本工具能表示的根式范围（' + e.message +
+        '）。换一个系数（例如让判别式是整数）就能得到完整的精确解析。');
+    }
     var V = Quad.vieta(q);
     var an = E.analyzeDomain(q, m, n, leftOpen, rightOpen);
     var up = an.up;
@@ -183,8 +202,80 @@
     md('> 本报告中的数值**全部为精确值**：凡不是整数的结果，一律用**分数**或**根号**表示；' +
        '圆括号里的近似小数仅供直观参考。');
 
-    /* ======== 一、已知条件 ======== */
-    md('## 一、已知条件');
+    /* ==========================================================
+     * 一、结论速览 —— 先给结论，再给推导
+     * ========================================================== */
+    md('## 一、结论速览');
+    md('> 输入参数以后最该先看的三件事都在这一节：**顶点坐标**、**定义域上的最值**、**三种形式的互化**。' +
+       '推导过程和扩展结论一律排在后面的章节。');
+
+    /* --- 1.1 顶点与对称轴 --- */
+    md('### 1.1 顶点坐标与对称轴');
+    T(['项目', '结论'], [
+      ['顶点坐标', '$\\left(' + tex.exact(h) + ',\\ ' + tex.exact(k) + '\\right)$' +
+        '（近似 $\\left(' + approx(h) + ',\\ ' + approx(k) + '\\right)$）'],
+      ['对称轴', '直线 $x = ' + tex.exact(h) + '$'],
+      ['开口方向', '向' + (up ? '上' : '下') + '（$a = ' + tex.exact(q.a) + ' ' + (up ? '>' : '<') + ' 0$）'],
+      ['开口大小', '$a$ 的绝对值为 $' + tex.exact(q.a.abs()) +
+        '$，越大开口越**窄**，越小开口越**宽**'],
+      ['无限制最值', (up ? '最小值' : '最大值') + ' $y = ' + tex.exact(k) + '$，在顶点 $x = ' + tex.exact(h) + '$ 处取得']
+    ]);
+    md('顶点是抛物线的**最高点或最低点**：开口向' + (up ? '上' : '下') + '，顶点就是' + (up ? '**最低点**' : '**最高点**') +
+       '；对称轴 $x = ' + tex.exact(h) + '$ 是过顶点、垂直于 $x$ 轴的直线，图像关于它**左右对称**。');
+
+    /* --- 1.2 定义域上的最值 --- */
+    md('### 1.2 定义域上的最值与值域');
+    md('**定义域**：$' + domTex + '$（' + domLabel + '）');
+    if (domMode === 'all') {
+      md('定义域是**全体实数**，没有端点可以限制函数值：');
+      md('- ' + extremeLine(an.min, 'min', '小'));
+      md('- ' + extremeLine(an.max, 'max', '大'));
+    } else {
+      T(['项目', '结论'], [
+        ['最大值', exSummary(an.max, '大', 'max')],
+        ['最小值', exSummary(an.min, '小', 'min')]
+      ]);
+      P('**怎么来的**');
+      md(branchExplain(an, q, h, k, hasLeft, hasRight, m, n, leftOpen, rightOpen, domTex));
+    }
+    md('**值域**：$' + rangeTex(an.range) + '$');
+    if (an.min.exists && !an.min.attained) {
+      md('> 注意：值域左端的 $' + tex.exact(an.min.value) + '$ 在定义域内**取不到**，所以值域左端用圆括号。');
+    }
+    if (an.max.exists && !an.max.attained) {
+      md('> 注意：值域右端的 $' + tex.exact(an.max.value) + '$ 在定义域内**取不到**，所以值域右端用圆括号。');
+    }
+
+    /* --- 1.3 三种形式的互化 --- */
+    md('### 1.3 三种形式的互化');
+    md('> 同一个二次函数就是同一个式子，只是写法不同：');
+    md('> $$' + generalTex(q) + ' \\quad\\Longleftrightarrow\\quad y = ' + vertexFormTex(q.a, h, k) +
+      ' \\quad\\Longleftrightarrow\\quad ' +
+      (R.kind === 'none' ? '\\text{无交点式}' : 'y = ' + tex.factoredForm(q.a, R.list[0], R.kind === 'double' ? R.list[0] : R.list[1], 'x')) + '$$');
+    var aPre = coefPrefix(q.a);
+    var generalBody = generalTex(q).replace('y = ', '');
+    var vertexBody = vertexFormTex(q.a, h, k);
+    var factoredBody = R.kind === 'none' ? null : tex.factoredForm(q.a, R.list[0], R.kind === 'double' ? R.list[0] : R.list[1], 'x');
+    var formRows = [
+      ['一般式', '$y = ' + generalBody + '$', '直接读出系数 $a$、$b$、$c$，便于代值计算'],
+      ['顶点式', '$y = ' + vertexBody + '$', '一眼读出顶点 $\\left(' + tex.exact(h) + ',\\ ' + tex.exact(k) + '\\right)$ 与对称轴']
+    ];
+    if (R.kind === 'none') {
+      formRows.push(['交点式', '不存在（$\\Delta < 0$，图像与 $x$ 轴无交点）', '—']);
+    } else if (R.kind === 'double') {
+      formRows.push(['交点式', '$y = ' + factoredBody + '$（两根重合，即完全平方式）', '一眼读出（唯一的）零点 $x = ' + tex.exact(R.list[0]) + '$']);
+    } else {
+      formRows.push(['交点式', '$y = ' + factoredBody + '$', '一眼读出两个零点 $x_1 = ' + tex.exact(R.list[0]) + '$，$x_2 = ' + tex.exact(R.list[1]) + '$']);
+    }
+    var stdPoly = polyTex([{ c: new Frac(1n), p: 2 }, { c: q.b.div(q.a), p: 1 }, { c: q.c.div(q.a), p: 0 }]);
+    formRows.push(['标准形（提取 $a$）', '$y = ' +
+      (aPre === '' ? stdPoly : aPre + '\\left(' + stdPoly + '\\right)') + '$', '配方法的第一步']);
+    T(['形式', '表达式', '好处'], formRows);
+    md('$a = ' + tex.exact(q.a) + '$ 在三种形式中是**同一个数**，始终不变——它决定**开口方向**（$' +
+      (up ? 'a > 0$ 向上' : 'a < 0$ 向下') + '）和**开口大小**（绝对值越大开口越窄）。');
+
+    /* ======== 二、已知条件 ======== */
+    md('## 二、已知条件');
     T(['项目', '内容'], [
       ['输入形式', FORM_NAME[form]],
       ['已知参数', '$' + known + '$'],
@@ -193,109 +284,8 @@
     ]);
     md(givenLine);
 
-    /* ======== 二、形式互化 ======== */
-    md('## 二、各种形式的互化');
-    md('> **一眼看清三种形式（同一个函数的等价写法）**');
-    md('> $$' + generalTex(q) + ' \\quad\\Longleftrightarrow\\quad y = ' + vertexFormTex(q.a, h, k) +
-      ' \\quad\\Longleftrightarrow\\quad ' +
-      (R.kind === 'none' ? '\\text{无交点式}' : 'y = ' + tex.factoredForm(q.a, R.list[0], R.kind === 'double' ? R.list[0] : R.list[1], 'x')) + '$$');
-    md('同一个二次函数可以写成下面几种等价形式，它们之间可以互相转化。');
-
-    /* --- 2.1 三种形式并列 --- */
-    md('### 2.1 三种形式对照');
-    var aPre = coefPrefix(q.a);
-    var generalBody = generalTex(q).replace('y = ', '');
-    var vertexBody = vertexFormTex(q.a, h, k);
-    var factoredBody = R.kind === 'none' ? null : tex.factoredForm(q.a, R.list[0], R.kind === 'double' ? R.list[0] : R.list[1], 'x');
-    var formRows = [
-      ['一般式', '$y = ' + generalBody + '$'],
-      ['顶点式', '$y = ' + vertexBody + '$']
-    ];
-    if (R.kind === 'none') {
-      formRows.push(['交点式', '不存在（$\\Delta < 0$，图像与 $x$ 轴无交点，无法分解为 $a(x-x_1)(x-x_2)$）']);
-    } else if (R.kind === 'double') {
-      formRows.push(['交点式', '$y = ' + factoredBody + '$（两根重合，即完全平方式）']);
-    } else {
-      formRows.push(['交点式', '$y = ' + factoredBody + '$']);
-    }
-    var stdPoly = polyTex([{ c: new Frac(1n), p: 2 }, { c: q.b.div(q.a), p: 1 }, { c: q.c.div(q.a), p: 0 }]);
-    formRows.push(['标准形（提取 $a$）', '$y = ' +
-      (aPre === '' ? stdPoly : aPre + '\\left(' + stdPoly + '\\right)') + '$']);
-    T(['形式', '表达式'], formRows);
-
-    /* --- 2.2 配方法 --- */
-    md('### 2.2 一般式 $\\Longleftrightarrow$ 顶点式（配方法）');
-    if (q.b.isZero()) {
-      md('因为一次项系数 $b = 0$，一般式 $y = ' + generalBody + '$ **本身就是顶点式**（顶点落在 $y$ 轴上），无需配方。');
-    } else {
-      md('把二次项系数 $a$ 提出来，再在括号内配成完全平方：');
-      md('$$' + generalBody + ' \\;=\\; ' + aPre + '\\left(' +
-        polyTex([{ c: new Frac(1n), p: 2 }, { c: q.b.div(q.a), p: 1 }]) + '\\right)' +
-        (q.c.isZero() ? '' : (q.c.sign() < 0 ? ' - ' + tex.exact(q.c.neg()) : ' + ' + tex.exact(q.c))) +
-        ' \\;=\\; ' + vertexBody + '$$');
-      md('- 一次项系数一半的平方：$\\left(\\dfrac{' + tex.exact(q.b.div(q.a)) + '}{2}\\right)^{2} = \\left(' +
-        tex.exact(q.b.div(q.a.mul(TWO))) + '\\right)^{2} = ' +
-        tex.exact(q.b.div(q.a.mul(TWO)).mul(q.b.div(q.a.mul(TWO)))) + '$');
-    }
-    md('- 顶点横坐标 $h = -\\dfrac{b}{2a} = ' + tex.exact(h) + '$，纵坐标 $k = ' + tex.exact(k) + '$。');
-    md('- 反过来（顶点式 $\\to$ 一般式）就是展开 $a(x-h)^{2}+k$，两者是同一个式子。');
-
-    /* --- 2.3 交点式 --- */
-    md('### 2.3 一般式 $\\Longleftrightarrow$ 交点式（因式分解）');
-    if (R.kind === 'none') {
-      md('- 因为 $\\Delta = ' + tex.exact(D) + ' < 0$，**没有实数零点**，所以这个函数**不存在交点式**。');
-    } else if (R.kind === 'double') {
-      md('- 两根相等 $x_1 = x_2 = ' + tex.exact(R.list[0]) + '$，交点式退化为完全平方式：');
-      md('$$y = ' + factoredBody + '$$');
-    } else {
-      md('- 先用求根公式求出两个零点 $x_1 = ' + tex.exact(R.list[0]) + '$、$x_2 = ' + tex.exact(R.list[1]) + '$，再写成：');
-      md('$$y = ' + factoredBody + '$$');
-    }
-
-    /* --- 2.4 a 的作用 --- */
-    md('### 2.4 三种形式的共同点：$a$ 始终不变');
-    md('$a = ' + tex.exact(q.a) + '$ 在三种形式中是同一个数，它决定**开口方向**（$' + (up ? 'a > 0$ 向上' : 'a < 0$ 向下') +
-      '）和**开口大小**（$|a|$ 越大开口越窄）。');
-    if (form === 'points') {
-      md('### 2.5 三点确定函数的求解过程');
-      md('把三个点分别代入 $y = ax^{2} + bx + c$，得到关于 $a$、$b$、$c$ 的三元一次方程组：');
-      md('$$\\begin{cases}' + given.pts.map(function (p) {
-        return 'a\\left(' + tex.exact(p.x) + '\\right)^{2} + b\\left(' + tex.exact(p.x) + '\\right) + c = ' + tex.exact(p.y);
-      }).join('\\\\[4pt]') + '\\end{cases}$$');
-      var detA = Quad.det3(given.pts.map(function (p) { return p.y; }),
-        given.pts.map(function (p) { return p.x; }),
-        [new Frac(1n), new Frac(1n), new Frac(1n)]);
-      var detB = Quad.det3(given.pts.map(function (p) { return p.x.mul(p.x); }),
-        given.pts.map(function (p) { return p.y; }),
-        [new Frac(1n), new Frac(1n), new Frac(1n)]);
-      var detC = Quad.det3(given.pts.map(function (p) { return p.x.mul(p.x); }),
-        given.pts.map(function (p) { return p.x; }),
-        given.pts.map(function (p) { return p.y; }));
-      var detD = Quad.det3(given.pts.map(function (p) { return p.x.mul(p.x); }),
-        given.pts.map(function (p) { return p.x; }),
-        [new Frac(1n), new Frac(1n), new Frac(1n)]);
-      md('用**克莱姆法则**直接解出（系数行列式 $D = ' + tex.exact(detD) + ' \\ne 0$）：');
-      md('$$a = \\dfrac{D_a}{D} = ' + tex.exact(q.a) + ',\\qquad b = \\dfrac{D_b}{D} = ' + tex.exact(q.b) +
-        ',\\qquad c = \\dfrac{D_c}{D} = ' + tex.exact(q.c) + '$$');
-      md('其中 $D_a = ' + tex.exact(detA) + '$，$D_b = ' + tex.exact(detB) + '$，$D_c = ' + tex.exact(detC) + '$。');
-    }
-
-    /* ======== 三、顶点与对称轴 ======== */
-    md('## 三、顶点与对称轴');
-    md('- **顶点坐标**：$\\left(' + tex.exact(h) + ',\\ ' + tex.exact(k) + '\\right)$' +
-       '（近似：$\\left(' + approx(h) + ',\\ ' + approx(k) + '\\right)$）');
-    md('- **对称轴**：直线 $x = ' + tex.exact(h) + '$');
-    md('- **开口方向**：$a = ' + tex.exact(q.a) + ' ' + (up ? '>' : '<') + ' 0$，图像开口向' + (up ? '上' : '下') + '。');
-    md('- **顶点是最值点**：' + (up ? '最小值' : '最大值') + ' $y = ' + tex.exact(k) + '$（在 $x = ' + tex.exact(h) + '$ 处取得）。');
-    md('**配方推导**');
-    md('$$y = ' + generalTex(q).replace('y = ', '') + ' = ' +
-      (q.a.isOne() ? '' : tex.exactParen(q.a)) + '\\left(' + shiftTex(h) + '\\right)^{2} ' +
-      (k.isZero() ? '' : (k.sign() < 0 ? '- ' : '+ ') + tex.exact(k.abs())) + '$$');
-    md('因此顶点为 $\\left(' + tex.exact(h) + ',\\ ' + tex.exact(k) + '\\right)$，对称轴为 $x = ' + tex.exact(h) + '$。' +
-       '图像关于这条直线**左右对称**：点 $\\left(' + tex.exact(h.sub(new Frac(1n))) + ',\\ ' + tex.exact(Quad.evalAt(q, h.sub(new Frac(1n)))) + '\\right)$ 与点 $\\left(' + tex.exact(h.add(new Frac(1n))) + ',\\ ' + tex.exact(Quad.evalAt(q, h.add(new Frac(1n)))) + '\\right)$ 就是一对对称点。');
-
-    /* ======== 四、判别式与零点 ======== */
-    md('## 四、判别式与零点');
+    /* ======== 三、判别式与零点 ======== */
+    md('## 三、判别式与零点');
     var fourAC = q.a.mul(q.c).mul(FOUR);
     md('- 判别式：$\\Delta = b^{2} - 4ac = ' + tex.exactParen(q.b) + '^{2} - 4 \\times ' + tex.exactParen(q.a) +
        ' \\times ' + tex.exactParen(q.c) + ' = ' + tex.exact(q.b.mul(q.b)) +
@@ -317,102 +307,162 @@
       md('- 交点式（完全平方式）：$' + tex.factoredForm(q.a, R.list[0], R.list[0], 'x') + '$');
     } else {
       md('- $\\Delta = ' + tex.exact(D) + ' < 0$：图像与 $x$ 轴**没有交点**，方程在实数范围内无解。');
-      md('- 若允许复数，一对共轭复根为 $x = ' + tex.exact(R.real) + ' \\pm ' + tex.exact(R.imag) + '\\,i$（仅供参考）。');
+      if (R.imag) {
+        md('- 若允许复数，一对共轭复根为 $x = ' + tex.exact(R.real) + ' \\pm ' + tex.exact(R.imag) + '\\,i$（仅供参考）。');
+      } else {
+        md('- 若允许复数，虚部需要 $\\sqrt{' + tex.exact(D.neg()) + '}$，它无法写成有限根式，这里就不再展开了——本工具只讨论实数范围。');
+      }
       md('- 结论：该函数**没有实数零点**，所以不存在交点式。');
     }
     md('**根与系数的关系（韦达定理）**');
     md('- $x_1 + x_2 = -\\dfrac{b}{a} = ' + tex.exact(V.sum) + '$');
     md('- $x_1 x_2 = \\dfrac{c}{a} = ' + tex.exact(V.product) + '$');
 
-    /* ======== 五、定义域与最值 ======== */
-    md('## 五、定义域与最值');
-    md('**定义域**：$' + domTex + '$');
-    md('**最值结论**');
-    md('- ' + extremeLine(an.min, 'min', '小'));
-    md('- ' + extremeLine(an.max, 'max', '大'));
-    md('**分类讨论**');
-    md(branchExplain(an, q, h, k, hasLeft, hasRight, m, n, leftOpen, rightOpen, domTex));
-    md('**值域**：$' + rangeTex(an.range) + '$');
-    if (an.min.exists && !an.min.attained) {
-      md('> 注意：值域左端的 $' + tex.exact(an.min.value) + '$ 在定义域内**取不到**，所以值域左端用圆括号。');
-    }
-    if (an.max.exists && !an.max.attained) {
-      md('> 注意：值域右端的 $' + tex.exact(an.max.value) + '$ 在定义域内**取不到**，所以值域右端用圆括号。');
+    /* 精简模式下省略本节 */
+    if (want(0)) {
+      /* ======== 四、图像特征 ======== */
+      md('## 四、图像特征');
+      var featRows = [
+        ['开口方向', '向' + (up ? '上' : '下') + '（$a = ' + tex.exact(q.a) + ' ' + (up ? '>' : '<') + ' 0$）'],
+        ['顶点', '$\\left(' + tex.exact(h) + ',\\ ' + tex.exact(k) + '\\right)$'],
+        ['对称轴', '$x = ' + tex.exact(h) + '$'],
+        ['与 $y$ 轴交点', q.c.isZero() ? '$(0,\\ 0)$（图像过原点）' : '$\\left(0,\\ ' + tex.exact(q.c) + '\\right)$']
+      ];
+      featRows.push(['与 $x$ 轴交点', (function () {
+        if (R.kind === 'two') return '$\\left(' + tex.exact(R.list[0]) + ',\\ 0\\right)$、$\\left(' + tex.exact(R.list[1]) + ',\\ 0\\right)$';
+        if (R.kind === 'double') return '$\\left(' + tex.exact(R.list[0]) + ',\\ 0\\right)$（相切，二重零点）';
+        return '无交点（$\\Delta < 0$）';
+      })()]);
+      featRows.push(['无限制最值', (up ? '最小值' : '最大值') + ' $' + tex.exact(k) + '$（$x = ' + tex.exact(h) + '$）']);
+      featRows.push(['对称点举例', '$\\left(' + tex.exact(h.sub(new Frac(1n))) + ',\\ ' + tex.exact(Quad.evalAt(q, h.sub(new Frac(1n)))) + '\\right)$ 与 ' +
+        '$\\left(' + tex.exact(h.add(new Frac(1n))) + ',\\ ' + tex.exact(Quad.evalAt(q, h.add(new Frac(1n)))) + '\\right)$']);
+      T(['特征', '结论'], featRows);
     }
 
-    /* ======== 六、单调性 ======== */
-    md('## 六、单调性');
-    md('- 对称轴 $x = ' + tex.exact(h) + '$ 是单调性的分界点。');
-    if (up) {
-      md('- 在 $\\left(-\\infty,\\ ' + tex.exact(h) + '\\right]$ 上**单调递减**，在 $\\left[' + tex.exact(h) + ',\\ +\\infty\\right)$ 上**单调递增**。');
-    } else {
-      md('- 在 $\\left(-\\infty,\\ ' + tex.exact(h) + '\\right]$ 上**单调递增**，在 $\\left[' + tex.exact(h) + ',\\ +\\infty\\right)$ 上**单调递减**。');
+    /* 精简模式下省略本节 */
+    if (want(0)) {
+      /* ======== 五、配方与因式分解详解 ======== */
+      md('## 五、配方与因式分解详解');
+      md('这一节把第一章里的三种形式**逐项推导一遍**，验证它们确实是同一个函数。');
+
+      md('### 5.1 一般式 $\\Longleftrightarrow$ 顶点式（配方法）');
+      if (q.b.isZero()) {
+        md('因为一次项系数 $b = 0$，一般式 $y = ' + generalBody + '$ **本身就是顶点式**（顶点落在 $y$ 轴上），无需配方。');
+      } else {
+        md('把二次项系数 $a$ 提出来，再在括号内配成完全平方：');
+        md('$$' + generalBody + ' \\;=\\; ' + aPre + '\\left(' +
+          polyTex([{ c: new Frac(1n), p: 2 }, { c: q.b.div(q.a), p: 1 }]) + '\\right)' +
+          (q.c.isZero() ? '' : (q.c.sign() < 0 ? ' - ' + tex.exact(q.c.neg()) : ' + ' + tex.exact(q.c))) +
+          ' \\;=\\; ' + vertexBody + '$$');
+        md('- 一次项系数一半的平方：$\\left(\\dfrac{' + tex.exact(q.b.div(q.a)) + '}{2}\\right)^{2} = \\left(' +
+          tex.exact(q.b.div(q.a.mul(TWO))) + '\\right)^{2} = ' +
+          tex.exact(q.b.div(q.a.mul(TWO)).mul(q.b.div(q.a.mul(TWO)))) + '$');
+      }
+      md('- 顶点横坐标 $h = -\\dfrac{b}{2a} = ' + tex.exact(h) + '$，纵坐标 $k = ' + tex.exact(k) + '$。');
+      md('- 反过来（顶点式 $\\to$ 一般式）就是展开 $a(x-h)^{2}+k$，两者是同一个式子。');
+
+      md('### 5.2 一般式 $\\Longleftrightarrow$ 交点式（因式分解）');
+      if (R.kind === 'none') {
+        md('- 因为 $\\Delta = ' + tex.exact(D) + ' < 0$，**没有实数零点**，所以这个函数**不存在交点式**。');
+      } else if (R.kind === 'double') {
+        md('- 两根相等 $x_1 = x_2 = ' + tex.exact(R.list[0]) + '$，交点式退化为完全平方式：');
+        md('$$y = ' + factoredBody + '$$');
+      } else {
+        md('- 先用求根公式求出两个零点 $x_1 = ' + tex.exact(R.list[0]) + '$、$x_2 = ' + tex.exact(R.list[1]) + '$，再写成：');
+        md('$$y = ' + factoredBody + '$$');
+      }
     }
-    if (domMode === 'interval') md('- 在给定定义域 $' + domTex + '$ 上：' + monotoneOnDomain(an, up));
 
-    /* ======== 七、图像特征 ======== */
-    md('## 七、图像特征');
-    var featRows = [
-      ['开口方向', '向' + (up ? '上' : '下') + '（$a = ' + tex.exact(q.a) + ' ' + (up ? '>' : '<') + ' 0$）'],
-      ['顶点', '$\\left(' + tex.exact(h) + ',\\ ' + tex.exact(k) + '\\right)$'],
-      ['对称轴', '$x = ' + tex.exact(h) + '$'],
-      ['与 $y$ 轴交点', q.c.isZero() ? '$(0,\\ 0)$（图像过原点）' : '$\\left(0,\\ ' + tex.exact(q.c) + '\\right)$']
-    ];
-    featRows.push(['与 $x$ 轴交点', (function () {
-      if (R.kind === 'two') return '$\\left(' + tex.exact(R.list[0]) + ',\\ 0\\right)$、$\\left(' + tex.exact(R.list[1]) + ',\\ 0\\right)$';
-      if (R.kind === 'double') return '$\\left(' + tex.exact(R.list[0]) + ',\\ 0\\right)$（相切，二重零点）';
-      return '无交点（$\\Delta < 0$）';
-    })()]);
-    featRows.push(['无限制最值', (up ? '最小值' : '最大值') + ' $' + tex.exact(k) + '$（$x = ' + tex.exact(h) + '$）']);
-    featRows.push(['对称点举例', '$\\left(' + tex.exact(h.sub(new Frac(1n))) + ',\\ ' + tex.exact(Quad.evalAt(q, h.sub(new Frac(1n)))) + '\\right)$ 与 ' +
-      '$\\left(' + tex.exact(h.add(new Frac(1n))) + ',\\ ' + tex.exact(Quad.evalAt(q, h.add(new Frac(1n)))) + '\\right)$']);
-    T(['特征', '结论'], featRows);
-
-    /* ======== 八、精确值对照 ======== */
-    md('## 八、精确值与近似值对照');
-    var valRows = [
-      ['$a$', '$' + tex.exact(q.a) + '$', approx(q.a)],
-      ['$b$', '$' + tex.exact(q.b) + '$', approx(q.b)],
-      ['$c$', '$' + tex.exact(q.c) + '$', approx(q.c)],
-      ['$h$（顶点横坐标）', '$' + tex.exact(h) + '$', approx(h)],
-      ['$k$（顶点纵坐标）', '$' + tex.exact(k) + '$', approx(k)],
-      ['$\\Delta$（判别式）', '$' + tex.exact(D) + '$', approx(D)]
-    ];
-    if (R.kind === 'two') {
-      valRows.push(['$x_1$', '$' + tex.exact(R.list[0]) + '$', approx(R.list[0])]);
-      valRows.push(['$x_2$', '$' + tex.exact(R.list[1]) + '$', approx(R.list[1])]);
-    } else if (R.kind === 'double') {
-      valRows.push(['$x_{1,2}$（二重根）', '$' + tex.exact(R.list[0]) + '$', approx(R.list[0])]);
-    } else {
-      valRows.push(['实数零点', '不存在', '—']);
+    /* 精简模式下省略本节 */
+    if (want(0)) {
+      /* ======== 六、单调性 ======== */
+      md('## 六、单调性');
+      md('- 对称轴 $x = ' + tex.exact(h) + '$ 是单调性的分界点。');
+      if (up) {
+        md('- 在 $\\left(-\\infty,\\ ' + tex.exact(h) + '\\right]$ 上**单调递减**，在 $\\left[' + tex.exact(h) + ',\\ +\\infty\\right)$ 上**单调递增**。');
+      } else {
+        md('- 在 $\\left(-\\infty,\\ ' + tex.exact(h) + '\\right]$ 上**单调递增**，在 $\\left[' + tex.exact(h) + ',\\ +\\infty\\right)$ 上**单调递减**。');
+      }
+      if (domMode === 'interval') md('- 在给定定义域 $' + domTex + '$ 上：' + monotoneOnDomain(an, up));
     }
-    if (an.min.exists) valRows.push(['最小值 $y_{\\min}$', '$' + tex.exact(an.min.value) + '$', approx(an.min.value)]);
-    if (an.max.exists) valRows.push(['最大值 $y_{\\max}$', '$' + tex.exact(an.max.value) + '$', approx(an.max.value)]);
-    T(['量', '精确值', '近似值'], valRows);
 
-    /* ======== 九、求解步骤 ======== */
-    md('## 九、求解步骤');
-    steps(form, q, given, h, k, D, R, an, domMode, domTex, m, n, hasLeft, hasRight, leftOpen, rightOpen)
-      .forEach(function (s, i) { md((i + 1) + '. ' + s); });
-
-    /* ======== 十、检验 ======== */
-    md('## 十、结果检验');
-    var fh = Quad.evalAt(q, h);
-    md('- 顶点纵坐标：$f\\left(' + tex.exact(h) + '\\right) = ' + tex.exact(fh) + '$，与 $k = ' + tex.exact(k) + '$ ' + (fh.eq(k) ? '**一致** ✓' : '**不一致** ✗'));
-    md('- 判别式：$b^{2} - 4ac = ' + tex.exact(q.b.mul(q.b)) +
-      (q.a.mul(q.c).mul(FOUR).sign() < 0 ? ' + ' + tex.exact(q.a.mul(q.c).mul(FOUR).neg()) : ' - ' + tex.exact(q.a.mul(q.c).mul(FOUR))) +
-      ' = ' + tex.exact(D) + '$ ✓');
-    if (R.kind === 'two') {
-      md('- 零点代回原式：$f\\left(x_1\\right) = ' + tex.exact(Quad.evalAtSurd(q, R.list[0])) + '$，$f\\left(x_2\\right) = ' +
-        tex.exact(Quad.evalAtSurd(q, R.list[1])) + '$，均为 $0$ ✓');
-    } else if (R.kind === 'double') {
-      md('- 零点代回原式：$f\\left(x_{1,2}\\right) = ' + tex.exact(Quad.evalAtSurd(q, R.list[0])) + ' = 0$ ✓');
-    } else {
-      md('- 零点：$\\Delta < 0$，无实根，无需代入检验。');
+    /* 精简模式下省略本节 */
+    if (want(0)) {
+      /* ======== 七、精确值对照 ======== */
+      md('## 七、精确值与近似值对照');
+      var valRows = [
+        ['$a$', '$' + tex.exact(q.a) + '$', approx(q.a)],
+        ['$b$', '$' + tex.exact(q.b) + '$', approx(q.b)],
+        ['$c$', '$' + tex.exact(q.c) + '$', approx(q.c)],
+        ['$h$（顶点横坐标）', '$' + tex.exact(h) + '$', approx(h)],
+        ['$k$（顶点纵坐标）', '$' + tex.exact(k) + '$', approx(k)],
+        ['$\\Delta$（判别式）', '$' + tex.exact(D) + '$', approx(D)]
+      ];
+      if (R.kind === 'two') {
+        valRows.push(['$x_1$', '$' + tex.exact(R.list[0]) + '$', approx(R.list[0])]);
+        valRows.push(['$x_2$', '$' + tex.exact(R.list[1]) + '$', approx(R.list[1])]);
+      } else if (R.kind === 'double') {
+        valRows.push(['$x_{1,2}$（二重根）', '$' + tex.exact(R.list[0]) + '$', approx(R.list[0])]);
+      } else {
+        valRows.push(['实数零点', '不存在', '—']);
+      }
+      if (an.min.exists) valRows.push(['最小值 $y_{\\min}$', '$' + tex.exact(an.min.value) + '$', approx(an.min.value)]);
+      if (an.max.exists) valRows.push(['最大值 $y_{\\max}$', '$' + tex.exact(an.max.value) + '$', approx(an.max.value)]);
+      T(['量', '精确值', '近似值'], valRows);
     }
-    md('- 对称轴：$x = -\\dfrac{b}{2a} = ' + tex.exact(h) + '$ ✓');
-    md('---');
-    md('*报告由 quadratic-exact-lab 自动生成 · 全部计算基于有理数与二次根式的精确运算，不含浮点误差。*');
+
+    /* 精简模式下省略本节 */
+    if (want(0)) {
+      /* ======== 八、求解步骤 ======== */
+      md('## 八、求解步骤');
+      if (form === 'points') {
+        md('### 8.0 三点确定函数的求解过程');
+        md('把三个点分别代入 $y = ax^{2} + bx + c$，得到关于 $a$、$b$、$c$ 的三元一次方程组：');
+        md('$$\\begin{cases}' + given.pts.map(function (p) {
+          return 'a\\left(' + tex.exact(p.x) + '\\right)^{2} + b\\left(' + tex.exact(p.x) + '\\right) + c = ' + tex.exact(p.y);
+        }).join('\\\\[4pt]') + '\\end{cases}$$');
+        var detA = Quad.det3(given.pts.map(function (p) { return p.y; }),
+          given.pts.map(function (p) { return p.x; }),
+          [new Frac(1n), new Frac(1n), new Frac(1n)]);
+        var detB = Quad.det3(given.pts.map(function (p) { return p.x.mul(p.x); }),
+          given.pts.map(function (p) { return p.y; }),
+          [new Frac(1n), new Frac(1n), new Frac(1n)]);
+        var detC = Quad.det3(given.pts.map(function (p) { return p.x.mul(p.x); }),
+          given.pts.map(function (p) { return p.x; }),
+          given.pts.map(function (p) { return p.y; }));
+        var detD = Quad.det3(given.pts.map(function (p) { return p.x.mul(p.x); }),
+          given.pts.map(function (p) { return p.x; }),
+          [new Frac(1n), new Frac(1n), new Frac(1n)]);
+        md('用**克莱姆法则**直接解出（系数行列式 $D = ' + tex.exact(detD) + ' \\ne 0$）：');
+        md('$$a = \\dfrac{D_a}{D} = ' + tex.exact(q.a) + ',\\qquad b = \\dfrac{D_b}{D} = ' + tex.exact(q.b) +
+          ',\\qquad c = \\dfrac{D_c}{D} = ' + tex.exact(q.c) + '$$');
+        md('其中 $D_a = ' + tex.exact(detA) + '$，$D_b = ' + tex.exact(detB) + '$，$D_c = ' + tex.exact(detC) + '$。');
+      }
+      steps(form, q, given, h, k, D, R, an, domMode, domTex, m, n, hasLeft, hasRight, leftOpen, rightOpen)
+        .forEach(function (s, i) { md((i + 1) + '. ' + s); });
+    }
+
+    /* 精简模式下省略本节 */
+    if (want(0)) {
+      /* ======== 九、结果检验 ======== */
+      md('## 九、结果检验');
+      var fh = Quad.evalAt(q, h);
+      md('- 顶点纵坐标：$f\\left(' + tex.exact(h) + '\\right) = ' + tex.exact(fh) + '$，与 $k = ' + tex.exact(k) + '$ ' + (fh.eq(k) ? '**一致** ✓' : '**不一致** ✗'));
+      md('- 判别式：$b^{2} - 4ac = ' + tex.exact(q.b.mul(q.b)) +
+        (q.a.mul(q.c).mul(FOUR).sign() < 0 ? ' + ' + tex.exact(q.a.mul(q.c).mul(FOUR).neg()) : ' - ' + tex.exact(q.a.mul(q.c).mul(FOUR))) +
+        ' = ' + tex.exact(D) + '$ ✓');
+      if (R.kind === 'two') {
+        md('- 零点代回原式：$f\\left(x_1\\right) = ' + tex.exact(Quad.evalAtSurd(q, R.list[0])) + '$，$f\\left(x_2\\right) = ' +
+          tex.exact(Quad.evalAtSurd(q, R.list[1])) + '$，均为 $0$ ✓');
+      } else if (R.kind === 'double') {
+        md('- 零点代回原式：$f\\left(x_{1,2}\\right) = ' + tex.exact(Quad.evalAtSurd(q, R.list[0])) + ' = 0$ ✓');
+      } else {
+        md('- 零点：$\\Delta < 0$，无实根，无需代入检验。');
+      }
+      md('- 对称轴：$x = -\\dfrac{b}{2a} = ' + tex.exact(h) + '$ ✓');
+      md('---');
+      md('*报告由 quadratic-exact-lab 自动生成 · 全部计算基于有理数与二次根式的精确运算，不含浮点误差。*');
+    }
 
     /* ---------- 供绘图使用的数据 ---------- */
     var data = {
@@ -458,6 +508,20 @@
     }
     return '**最' + sideName + '值不存在**：$' + sym + '$ 的下确界为 $' + tex.exact(ex.value) +
       '$，但该点位于**开区间端点**，函数只能无限逼近而取不到。';
+  }
+
+  /* 结论速览里的一行最值 */
+  function exSummary(ex, sideName, tag) {
+    if (!ex || !ex.exists) {
+      return '**不存在**（定义域向' + sideName + '侧无界，函数值可以无限' +
+        (sideName === '小' ? '减小' : '增大') + '）';
+    }
+    var sym = tag === 'min' ? 'y_{\\min}' : 'y_{\\max}';
+    if (!ex.attained) {
+      return '**不存在**：下（上）确界是 $' + sym + ' = ' + tex.exact(ex.value) +
+        '$，但该点位于**开区间端点**，只能无限逼近而取不到';
+    }
+    return '$' + sym + ' = ' + tex.exact(ex.value) + '$，当 ' + pointsText(ex.ats) + ' 时取得';
   }
 
   function branchExplain(an, q, h, k, hasLeft, hasRight, m, n, leftOpen, rightOpen, domTex) {

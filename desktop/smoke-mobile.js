@@ -191,6 +191,40 @@ const SCRIPT = `(async function () {
   window.QuadLab.setMode('quad');
   await sleep(200);
 
+  /* ---------- 8. v1.4.1：设置与使用说明两个弹窗在小屏上也要放得下 ---------- */
+  var vw = window.innerWidth;
+  window.QuadLab.openSettings();
+  await sleep(200);
+  var sp = q('settings-modal').querySelector('.modal-panel');
+  var sr = sp.getBoundingClientRect();
+  out.settingsFits = sr.left >= -1 && sr.right <= vw + 1 && sr.top >= -1 && sr.bottom <= window.innerHeight + 1;
+  out.settingsPanel = { left: Math.round(sr.left), right: Math.round(sr.right), top: Math.round(sr.top), bottom: Math.round(sr.bottom) };
+  out.settingsNoOverflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  /* 每一个设置项都要看得见、点得到 */
+  var closeRect = q('btn-settings-close').getBoundingClientRect();
+  out.settingsCloseTarget = Math.round(Math.min(closeRect.width, closeRect.height));
+  var decRect = q('opt-decimals').getBoundingClientRect();
+  out.settingsFieldTarget = Math.round(decRect.height);
+  /* 里面的按钮不能被裁掉 */
+  out.settingsHelpBtnVisible = q('btn-help-2').getBoundingClientRect().bottom <= window.innerHeight + 1;
+  q('settings-backdrop').click();
+  await sleep(160);
+  out.settingsClosedByBackdrop = q('settings-modal').hidden === true;
+
+  window.QuadLab.openHelp();
+  await sleep(200);
+  var hp = q('help-modal').querySelector('.modal-panel');
+  var hr = hp.getBoundingClientRect();
+  out.helpFits = hr.left >= -1 && hr.right <= vw + 1 && hr.top >= -1;
+  out.helpNoOverflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  out.helpHasContent = q('help-body').textContent.length > 2000;
+  var hcRect = q('btn-help-close').getBoundingClientRect();
+  out.helpCloseTarget = Math.round(Math.min(hcRect.width, hcRect.height));
+  q('btn-help-close').click();
+  await sleep(160);
+  out.helpClosedByBtn = q('help-modal').hidden === true;
+  out.overflowAtEnd = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+
   return out;
 })()`;
 
@@ -222,6 +256,13 @@ app.whenReady().then(async () => {
   const errs = [];
   win.webContents.on('console-message', (e, level, msg) => { if (level >= 2) errs.push(msg); });
   win.webContents.on('render-process-gone', (e, d) => errs.push('render-process-gone: ' + JSON.stringify(d)));
+
+  /* 自测必须先清空本机存储：App 会记住上次的输入与设置（v1.4.1 起），
+     上一次自测留下的状态会让这一次的初始断言不成立。
+     清完再加载页面，等价于「第一次打开 App」。 */
+  try {
+    await require('electron').session.defaultSession.clearStorageData({ storages: ['localstorage'] });
+  } catch (e) { /* 忽略：拿不到 session 也不该让自测崩掉 */ }
 
   await win.loadFile(path.join(ROOT, 'index.html'));
   await new Promise((r) => setTimeout(r, 1800));

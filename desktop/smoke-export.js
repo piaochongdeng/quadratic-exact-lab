@@ -28,6 +28,13 @@ app.whenReady().then(async () => {
     return { ok: true, filePath: target };
   });
 
+  /* 自测必须先清空本机存储：App 会记住上次的输入与设置（v1.4.1 起），
+     上一次自测留下的状态会让这一次的初始断言不成立。
+     清完再加载页面，等价于「第一次打开 App」。 */
+  try {
+    await require('electron').session.defaultSession.clearStorageData({ storages: ['localstorage'] });
+  } catch (e) { /* 忽略：拿不到 session 也不该让自测崩掉 */ }
+
   await win.loadFile(path.join(ROOT, 'index.html'));
   await new Promise((r) => setTimeout(r, 2200));
 

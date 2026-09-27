@@ -276,6 +276,66 @@ const SCRIPT = `(async function () {
   var url = window.TrigLab.getCanvasDataURL();
   out.canvasExport = !!url && url.indexOf('data:image/png;base64,') === 0 && url.length > 2000;
 
+  /* ---------- 16. v1.4.1：三角函数工作区的数学键盘 / 设置 / 说明 ---------- */
+
+  /* 函数值里写根号：sin θ = √3/2 应当精确反推出 60° */
+  clickTab(q('trig-fn-tabs'), 'fn', 'sin');
+  clickTab(q('trig-src-tabs'), 'src', 'user');
+  await sleep(60);
+  setText(q('trig-value'), '\\u221a3/2');
+  await sleep(360);
+  var mdSqrt = window.TrigLab.getMarkdown() || '';
+  out.sqrtValueOk = window.TrigLab.isReady();
+  out.sqrtValueExact = mdSqrt.indexOf('\\\\frac{\\\\sqrt{3}}{2}') >= 0;
+  out.sqrtValueAngle60 = /\\\\theta \\\\approx 60/.test(mdSqrt);
+  out.sqrtValueCosHalf = /\\\\cos\\\\theta.*\\\\frac\\{1\\}\\{2\\}/.test(mdSqrt);
+  out.sqrtValueTanSqrt3 = /\\\\tan\\\\theta.*\\\\sqrt\\{3\\}/.test(mdSqrt);
+
+  /* 三角函数工作区也有一块数学键盘，并且往当前聚焦的框里插 */
+  clickTab(q('trig-fn-tabs'), 'fn', 'tan');
+  await sleep(60);
+  var trigValue = q('trig-value');
+  clearText(trigValue);
+  trigValue.focus();
+  out.trigKeypadExists = !!document.querySelector('#trig-math-keys .mk[data-insert="\\u221a"]');
+  document.querySelector('#trig-math-keys .mk[data-insert="\\u221a"]').click();
+  window.QuadLab.insertMath('3');
+  out.trigKeypadTyped = trigValue.value;
+  await sleep(360);
+  var mdKeypad = window.TrigLab.getMarkdown() || '';
+  out.trigKeypadReport = /\\\\theta \\\\approx 60/.test(mdKeypad);
+  out.trigKeypadExact = mdKeypad.indexOf('\\sqrt{3}') >= 0;
+
+  /* 设置面板在三角函数工作区里照样能开、能改 */
+  window.QuadLab.openSettings();
+  out.settingsOpensInTrig = q('settings-modal').hidden === false;
+  out.trigDigitsBefore = q('trig-digits').value;
+  window.QuadLab.setSettings({ decimals: 6 });
+  await sleep(360);
+  out.trigDigitsAfterSetting = q('trig-digits').value;
+  out.trigReportFollowsDigits = /1\\.732051/.test(window.TrigLab.getMarkdown() || '');
+
+  /* 反过来：在三角函数这边改精度，设置面板也要跟着变 */
+  setText(q('trig-digits'), '2');
+  q('trig-digits').dispatchEvent(new Event('change'));
+  await sleep(360);
+  out.settingsFollowsTrigDigits = window.QuadLab.getSettings().decimals;
+  out.trigReportFollowsDigits2 = /1\\.73\\b/.test(window.TrigLab.getMarkdown() || '');
+
+  window.QuadLab.setSettings({ decimals: 4 });
+  window.QuadLab.closeSettings();
+  out.settingsClosedInTrig = q('settings-modal').hidden === true;
+  await sleep(200);
+
+  /* 说明弹窗在三角函数工作区里也能开 */
+  window.QuadLab.openHelp();
+  out.helpOpensInTrig = q('help-modal').hidden === false && q('help-body').textContent.length > 2000;
+  window.QuadLab.closeHelp();
+  out.helpClosedInTrig = q('help-modal').hidden === true;
+
+  out.katexErrorsAfterNewUi = document.querySelectorAll('.katex-error').length;
+  out.docOverflowAfterNewUi = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+
   return out;
 })()`;
 
@@ -293,6 +353,13 @@ app.whenReady().then(async () => {
   const errs = [];
   win.webContents.on('console-message', (e, level, msg) => { if (level >= 2) errs.push(msg); });
   win.webContents.on('render-process-gone', (e, d) => errs.push('render-process-gone: ' + JSON.stringify(d)));
+
+  /* 自测必须先清空本机存储：App 会记住上次的输入与设置（v1.4.1 起），
+     上一次自测留下的状态会让这一次的初始断言不成立。
+     清完再加载页面，等价于「第一次打开 App」。 */
+  try {
+    await require('electron').session.defaultSession.clearStorageData({ storages: ['localstorage'] });
+  } catch (e) { /* 忽略：拿不到 session 也不该让自测崩掉 */ }
 
   await win.loadFile(path.join(ROOT, 'index.html'));
   await new Promise((r) => setTimeout(r, 2200));

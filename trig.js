@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · trig.js  (v1.3.0)
+ * quadratic-exact-lab · trig.js  (v1.4.1)
  * ------------------------------------------------------------------
  * 三角函数与直角三角形精确计算引擎
  * 纯原创实现，零第三方依赖，浏览器与 Node.js 通用。
@@ -30,7 +30,8 @@
    * 0. 小工具
    * ========================================================== */
 
-  function R(x) { return new Surd(Frac.of(x), ZERO, 1n); }
+  /* 把任意数（Frac / Surd / number）包成根式数；纯有理数时就是 a + 0·√1 */
+  function R(x) { return E.toSurd(x); }
 
   /*
    * 规格串：'a' 表示有理数 a；'a,b,rad' 表示 a + b√rad。
@@ -138,7 +139,7 @@
 
   /* 由「已知的一个函数值」算近似值（取锐角主值：sin ≥ 0、cos ≥ 0） */
   function numericFromValue(fn, v) {
-    var x = Frac.of(v).toNumber();
+    var x = E.numOf(v).toNumber();
     if (fn === 'sin') {
       if (Math.abs(x) > 1) throw new Error('sin 的绝对值不能大于 1');
       var c = Math.sqrt(Math.max(0, 1 - x * x));
@@ -161,7 +162,10 @@
   var SAFE_LIMIT = 10000000n;
 
   function safeSqrtOfFrac(f) {
-    f = Frac.of(f);
+    f = E.numOf(f);
+    /* 带根号的输入（如 sin θ = √3/2）算到这里可能是 1 − 3/4 = 1/4 这种有理数，
+       那就照常精确开方；真要是无理数，交给浮点分支，不硬做。 */
+    if (!(f instanceof Frac)) return null;
     if (f.sign() < 0) return null;
     if (f.isZero()) return Surd.zero();
     if (f.n * f.d > SAFE_LIMIT) return null;
@@ -191,7 +195,7 @@
    * 能写成最简根式就返回精确值；写不出来或结果太丑则返回 null，由调用方改用浮点。
    */
   function deriveFromValue(fn, v) {
-    v = Frac.of(v);
+    v = E.numOf(v);
     if (fn === 'sin' || fn === 'cos') {
       if (v.abs().cmp(ONE) > 0) throw new Error((fn === 'sin' ? 'sin' : 'cos') + ' 的绝对值不能大于 1');
     }
@@ -279,7 +283,7 @@
    * ========================================================== */
 
   return {
-    version: '1.3.0',
+    version: '1.4.1',
     TABLE: TABLE,
     normDeg: normDeg,
     degText: degText,

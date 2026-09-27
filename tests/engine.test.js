@@ -1,4 +1,4 @@
-﻿/* 精确引擎自检：node tests/engine.test.js */
+/* 精确引擎自检：node tests/engine.test.js */
 'use strict';
 const assert = require('assert');
 const E = require('../engine.js');
@@ -66,10 +66,71 @@ t('精确判号（无浮点）', () => {
   assert.strictEqual(r2.cmp(new Frac(7, 5)), 1);
   assert.strictEqual(Surd.one().add(r2).sub(Surd.one().add(r2)).sign(), 0);
 });
-t('不同根式域相加会报错', () => {
+t('不同根号可以并存：√2 + √3 精确相加', () => {
   const r2 = Surd.sqrtOfFrac(new Frac(2));
   const r3 = Surd.sqrtOfFrac(new Frac(3));
-  assert.throws(() => r2.add(r3));
+  const s = r2.add(r3);
+  assert.strictEqual(tex.exact(s), '\\sqrt{2} + \\sqrt{3}');
+  assert.strictEqual(plain.exact(s), '√2 + √3');
+  assert.strictEqual(s.radicals().length, 2);
+  assert.ok(Math.abs(s.toNumber() - (Math.sqrt(2) + Math.sqrt(3))) < 1e-12);
+  /* 相加之后再减回去必须精确归零，而不是近似为 0 */
+  assert.strictEqual(s.sub(r2).sub(r3).sign(), 0);
+});
+
+console.log('\n[2.5] 根号输入解析（parseExact）');
+t('常见写法都能精确解析', () => {
+  const cases = [
+    ['2', '2'], ['-3.5', '-7/2'], ['3/4', '3/4'], ['0.75', '3/4'],
+    ['√2', '√2'], ['-√3', '-√3'], ['2√3', '2√3'], ['3/2√5', '(3/2)√5'],
+    ['√(9/2)', '(3/2)√2'], ['(1+√3)/2', '1/2 + (1/2)√3'],
+    ['sqrt(2)', '√2'], ['SQRT(2)', '√2'], ['2√3+√5', '2√3 + √5'],
+    ['√2√3', '√6'], ['√2×√3', '√6'], ['√2*√3', '√6'],
+    ['(1+√2)(1-√2)', '-1'], ['2^3', '8'], ['2^0.5', '√2'], ['2^(1/2)', '√2'],
+    ['5/√2', '(5/2)√2'], ['1/(1+√2)', '√2 - 1'],
+    ['√(3+2√2)', '1 + √2'], ['√(7-4√3)', '2 - √3'], ['√(5+2√6)', '√2 + √3'],
+    ['－２√３', '-2√3'], ['√2−√2', '0'], ['-2^2', '-4'], ['√2^2', '2'],
+    ['2^-1', '1/2'], ['１／２', '1/2'], ['（1＋√2）／2', '1/2 + (1/2)√2']
+  ];
+  cases.forEach(function (c) {
+    assert.strictEqual(plain.exact(E.parseExact(c[0])), c[1], '输入 ' + c[0]);
+  });
+});
+
+t('解析失败给出看得懂的中文提示', () => {
+  assert.throws(() => E.parseExact(''), /空的/);
+  assert.throws(() => E.parseExact('abc'), /看不懂这个符号/);
+  assert.throws(() => E.parseExact('(1+2'), /括号没有配对/);
+  assert.throws(() => E.parseExact('2+'), /算式/);
+  assert.throws(() => E.parseExact('1/(1-1)'), /除数不能为 0/);
+  assert.throws(() => E.parseExact('√(1+√5)'), /不能写成有限根式/);
+  assert.throws(() => E.parseExact('√(-4)'), /负数不能开平方/);
+  assert.throws(() => E.parseExact('2^(1/3)'), /开不尽/);
+  assert.throws(() => E.parseExact('2^100'), /指数太大/);
+});
+
+t('多根式的精确判号（不借助浮点误差）', () => {
+  assert.strictEqual(E.parseExact('√2 + √3').sign(), 1);
+  assert.strictEqual(E.parseExact('√2 + √3 - 3.1').sign(), 1);
+  assert.strictEqual(E.parseExact('√2 + √3 - 3.2').sign(), -1);
+  assert.strictEqual(E.parseExact('2√3 - √12').sign(), 0);
+  assert.strictEqual(E.parseExact('√1000001 - √1000000').sign(), 1);
+  /* 与 √2+√3 的真实值只差 1e-30 的一对写法，符号必须分得清 */
+  assert.strictEqual(E.parseExact('√2+√3-3.146264369941972342329135065715').sign(), 1);
+  assert.strictEqual(E.parseExact('√2+√3-3.146264369941972342329135065716').sign(), -1);
+});
+
+t('多根式的倒数与化简', () => {
+  assert.strictEqual(plain.exact(E.parseExact('1/(1+√2+√3)')), '1/2 + (1/4)√2 - (1/4)√6');
+  const s = E.parseExact('1/(1+√2+√3)');
+  assert.strictEqual(E.parseExact('1') .div(s).toNumber(), E.parseExact('1+√2+√3').toNumber());
+});
+
+t('numOf：有理数仍旧收敛回 Frac，只有带根号才留在 Surd', () => {
+  assert.ok(E.numOf(E.parseExact('2')) instanceof Frac);
+  assert.ok(E.numOf(E.parseExact('3/4')) instanceof Frac);
+  assert.ok(E.numOf(E.parseExact('√2')) instanceof Surd);
+  assert.ok(E.numOf(E.parseExact('√2√2')) instanceof Frac, '√2·√2 = 2 应还原成有理数');
 });
 
 console.log('\n[3] 三种形式的互化');

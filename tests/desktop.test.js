@@ -22,6 +22,10 @@ function t(name, fn) {
   catch (err) { fail++; console.log('  FAIL ' + name + '\n       ' + (err && err.message)); }
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
+/* 值相等断言：失败时把「实际值」也打出来，定位快得多 */
+assert.strictEqual = function (actual, expected, msg) {
+  if (actual !== expected) throw new Error((msg || '值不相等') + '（期望 ' + JSON.stringify(expected) + '，实际 ' + JSON.stringify(actual) + '）');
+};
 
 function runElectron(script, outFile) {
   const res = spawnSync(ELECTRON, [path.join('desktop', script)], {
@@ -63,6 +67,92 @@ t('输入还原 / 示例步进 / 主题切换', () => {
   assert(r1.themeAfterToggle === 'dark' && r1.themeBack === 'light', '主题切换异常');
 });
 t('图像可导出为 PNG', () => { assert(r1.canvasUrl && r1.canvasUrlLen > 1000, '画布导出为空'); });
+
+/* ---------------- v1.4.1：数学键盘 / 设置面板 / 使用说明 ---------------- */
+
+t('数学键盘：点 √ 就能输入根号', () => {
+  assert(r1.keypadHasSqrt, '找不到 √ 键');
+  assert.strictEqual(r1.afterSqrtClick, '√', '点一次 √ 应插入一个根号，实际 ' + r1.afterSqrtClick);
+  assert.strictEqual(r1.afterTwoSqrt, '√√', '连点两次应插入两个根号');
+  assert.strictEqual(r1.sqrtTwoValue, '√2', '退格 + √ + 2 应得到 √2，实际 ' + r1.sqrtTwoValue);
+});
+
+t('数学键盘：√( ) 把光标放进括号里', () => {
+  assert.strictEqual(r1.parenInserted, '√()', '√( ) 键应插入 √()，实际 ' + r1.parenInserted);
+  assert.strictEqual(r1.parenCaret, 2, '光标应停在括号中间，实际位置 ' + r1.parenCaret);
+});
+
+t('数学键盘：± 与 ⌫ 的行为正确', () => {
+  assert.strictEqual(r1.negToggle, '3', '-3 取反应为 3，实际 ' + r1.negToggle);
+  assert.strictEqual(r1.negToggleBack, '-3', '再取反应回到 -3，实际 ' + r1.negToggleBack);
+  assert.strictEqual(r1.negWrap, '-(1+√3)', '带运算的式子取反应加括号，实际 ' + r1.negWrap);
+  assert.strictEqual(r1.cleared, '', '清空应把输入框清干净，实际 ' + JSON.stringify(r1.cleared));
+});
+
+t('数学键盘：输入 √2 后报告里出现真正的根式', () => {
+  assert(r1.sqrtReportOk, '报告里没有 \\sqrt{2}');
+  assert(r1.sqrtReportVertex, '根号系数下报告不可用');
+});
+
+t('定义域端点也能用数学键盘写根号', () => {
+  assert(r1.domainRightEnabled, '取消 +∞ 后右端点输入框仍不可用');
+  assert.strictEqual(r1.domainSqrtValue, '√2', '端点未写入根号，实际 ' + r1.domainSqrtValue);
+  /* 光写进输入框不算数，得真的进到报告里 */
+  assert(r1.domainSqrtInMd, '定义域端点 √2 没有出现在报告里');
+});
+
+t('设置面板：改动立即生效、写进本机、界面同步', () => {
+  assert.strictEqual(r1.settingsDefaults, '{"decimals":4,"detail":"full","theme":"light","boot":"keep"}', '默认设置不对：' + r1.settingsDefaults);
+  assert.strictEqual(r1.settingsAfterSet, 6, 'setSettings 未生效');
+  assert(r1.settingsPersisted, '设置未写入 localStorage');
+  assert(r1.settingsInputSynced, '设置面板的数字框没有跟着变');
+  assert(r1.decimalsApplied, '小数位数没有作用到报告上');
+  assert.strictEqual(r1.decimals10, 10, '小数位数上限应为 10');
+  assert.strictEqual(r1.decimalsTooBig, 4, '超出范围的位数应当回落到默认值');
+});
+
+t('设置面板：「只要结论」真的只留结论', () => {
+  assert(r1.fullSections >= 9, '完整报告章节数偏少：' + r1.fullSections);
+  assert(r1.briefSections <= 4, '「只要结论」章节数仍偏多：' + r1.briefSections);
+  assert(r1.briefKeepsConclusion, '「只要结论」不应丢掉结论速览');
+});
+
+t('设置面板与页头按钮共用一个主题状态', () => {
+  assert.strictEqual(r1.themeAfterSettings, 'dark', '设置面板切深色失败');
+  assert.strictEqual(r1.themeButtonState, 'true', '设置面板里的主题按钮未选中');
+  assert.strictEqual(r1.themeAfterHeaderBtn, 'light', '页头按钮切换后主题不是浅色');
+  assert.strictEqual(r1.themePanelSynced, 'true', '页头按钮切换后设置面板没跟着变');
+  assert.strictEqual(r1.themeSettingValue, 'light', '主题没有写进设置');
+});
+
+t('设置面板：恢复默认设置', () => {
+  assert.strictEqual(r1.afterReset, '{"decimals":4,"detail":"full","theme":"light","boot":"keep"}', '恢复默认失败：' + r1.afterReset);
+});
+
+t('使用说明：能打开、内容完整、排版无误', () => {
+  assert(r1.helpClosedAtStart, '说明弹窗一开始就该是关着的');
+  assert(r1.helpOpened, 'openHelp 没有打开弹窗');
+  assert(r1.helpBodyLen > 2000, '说明正文太短：' + r1.helpBodyLen);
+  assert(r1.helpH1 === 1, '说明应只有一个一级标题');
+  assert(r1.helpH2 >= 12, '说明的二级章节太少：' + r1.helpH2);
+  assert(r1.helpTables >= 4, '说明里的表格太少：' + r1.helpTables);
+  assert(r1.helpKatexErrors === 0, '说明里的公式排版出错');
+  assert(!r1.helpStrayDollar, '说明里有没渲染的 $');
+  assert(r1.helpSaysSqrt, '说明里没讲数学键盘');
+});
+
+t('使用说明：Esc / ? / 点遮罩都能开关，关掉后键盘照常可用', () => {
+  assert(r1.helpClosedByEsc, 'Esc 没关掉说明');
+  assert(r1.helpOpenedByQuestion, '? 没打开说明');
+  assert(r1.helpClosedByBackdrop, '点遮罩没关掉说明');
+  assert(r1.keypadWorksAfterHelp, '关掉说明后数学键盘失灵');
+});
+
+t('新面板没有引入排版或控制台问题', () => {
+  assert(r1.katexErrorsTotal === 0, 'KaTeX 报错 ' + r1.katexErrorsTotal + ' 处');
+  assert(r1.docOverflowAtEnd === 0, '页面横向溢出 ' + r1.docOverflowAtEnd + 'px');
+});
+
 
 const r2 = runElectron('smoke-export.js', path.join('desktop', 'smoke-export-result.json'));
 t('导出 Markdown / PNG / JSON 落盘成功', () => {
@@ -210,6 +300,40 @@ t('三角函数：报告结构完整、无排版错误、可导出', () => {
   assert((r4.consoleErrors || []).length === 0, '控制台报错：' + JSON.stringify(r4.consoleErrors));
 });
 
+/* ---------------- v1.4.1：三角函数工作区的键盘 / 设置 / 说明 ---------------- */
+
+t('三角函数：函数值可以写根号并精确反推', () => {
+  assert(r4.sqrtValueOk === true, 'sin θ = √3/2 应当能算出结果');
+  assert(r4.sqrtValueExact === true, '报告里没有 √3/2');
+  assert(r4.sqrtValueAngle60 === true, '未精确反推出 60°');
+  assert(r4.sqrtValueCosHalf === true, 'cos 未给出 1/2');
+  assert(r4.sqrtValueTanSqrt3 === true, 'tan 未给出 √3');
+});
+
+t('三角函数：也有一块数学键盘，点 √ 就能写根号', () => {
+  assert(r4.trigKeypadExists === true, '三角函数工作区没有 √ 键');
+  assert(r4.trigKeypadTyped === '√3', '键盘没有插进当前输入框：' + r4.trigKeypadTyped);
+  assert(r4.trigKeypadReport === true, 'tan θ = √3 未反推出 60°');
+  assert(r4.trigKeypadExact === true, '报告里没有 √3');
+});
+
+t('三角函数：设置面板能开能关，精度与二次函数共用一个值', () => {
+  assert(r4.settingsOpensInTrig === true, '三角函数工作区里打不开设置面板');
+  assert(r4.trigDigitsBefore === '4', '初始精度应为 4，实际 ' + r4.trigDigitsBefore);
+  assert(r4.trigDigitsAfterSetting === '6', '设置面板改了位数，三角函数的精度框没跟上');
+  assert(r4.trigReportFollowsDigits === true, '三角函数报告没按新精度重排');
+  assert(r4.settingsFollowsTrigDigits === 2, '在三角函数里改精度没有写回设置');
+  assert(r4.trigReportFollowsDigits2 === true, '改回 2 位后报告没跟上');
+  assert(r4.settingsClosedInTrig === true, '设置面板没关掉');
+});
+
+t('三角函数：使用说明也能在三角函数工作区里打开', () => {
+  assert(r4.helpOpensInTrig === true, '三角函数工作区里打不开使用说明');
+  assert(r4.helpClosedInTrig === true, '使用说明没关掉');
+  assert(r4.katexErrorsAfterNewUi === 0, '新面板带来 KaTeX 报错 ' + r4.katexErrorsAfterNewUi + ' 处');
+  assert(r4.docOverflowAfterNewUi === 0, '新面板导致横向溢出 ' + r4.docOverflowAfterNewUi + 'px');
+});
+
 /* ---------------- 移动端 / 吸顶回归 ---------------- */
 
 const r5 = runElectron('smoke-mobile.js', path.join('desktop', 'smoke-mobile-result.json'));
@@ -264,6 +388,24 @@ t('两个工作区在手机尺寸下都能正常渲染', () => {
     assert(s.triNonBlank === true && s.unitNonBlank === true, k + '：三角函数画布空白');
     assert(s.triCanvas.w > 200 && s.triCanvas.h > 150, k + '：三角形画布尺寸异常 ' + JSON.stringify(s.triCanvas));
     assert(s.unitCanvas.w > 200 && s.unitCanvas.h > 150, k + '：单位圆画布尺寸异常 ' + JSON.stringify(s.unitCanvas));
+  });
+});
+
+t('手机竖屏：设置与使用说明弹窗放得下、点得到', () => {
+  PHONES.forEach((k) => {
+    const s = r5.sizes[k];
+    assert(s.settingsFits === true, k + '：设置面板超出视口 ' + JSON.stringify(s.settingsPanel));
+    assert(s.settingsNoOverflow === 0, k + '：设置面板撑出横向滚动 ' + s.settingsNoOverflow + 'px');
+    assert(s.settingsCloseTarget >= 44, k + '：设置关闭键只有 ' + s.settingsCloseTarget + 'px');
+    assert(s.settingsFieldTarget >= 44, k + '：设置里的小数位数输入框只有 ' + s.settingsFieldTarget + 'px');
+    assert(s.settingsHelpBtnVisible === true, k + '：设置面板里的「使用说明」按钮被裁掉了');
+    assert(s.settingsClosedByBackdrop === true, k + '：点遮罩没关掉设置');
+    assert(s.helpFits === true, k + '：使用说明面板超出视口');
+    assert(s.helpNoOverflow === 0, k + '：使用说明撑出横向滚动 ' + s.helpNoOverflow + 'px');
+    assert(s.helpHasContent === true, k + '：使用说明正文是空的');
+    assert(s.helpCloseTarget >= 44, k + '：说明关闭键只有 ' + s.helpCloseTarget + 'px');
+    assert(s.helpClosedByBtn === true, k + '：点关闭键没关掉使用说明');
+    assert(s.overflowAtEnd === 0, k + '：关掉弹窗后页面仍然横向溢出 ' + s.overflowAtEnd + 'px');
   });
 });
 

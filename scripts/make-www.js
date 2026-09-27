@@ -24,6 +24,7 @@ const FILES = [
   'engine.js',
   'report.js',
   'markdown.js',
+  'help.js',
   'ui.js',
   'trig.js',
   'trig-report.js',

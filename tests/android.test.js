@@ -33,11 +33,11 @@ const ADB = process.platform === 'win32'
   ? path.join(SDK, 'platform-tools', 'adb.exe')
   : path.join(SDK, 'platform-tools', 'adb');
 /* 默认验 debug 包；想验签名过的正式包就设 ANDROID_APK=<绝对路径>：
-     set ANDROID_APK=D:\...\quadratic-exact-lab-1.4.0-release.apk
+     set ANDROID_APK=D:\...\quadratic-exact-lab-1.4.1-release.apk
    正式包不开 WebView 远程调试（那是 debug 专属），所以这条路径验的是
    「页面能起来、布局对、导出真落盘」，验不了 CDP —— 脚本会自动降级。 */
 const APK = process.env.ANDROID_APK || path.join(ROOT, 'android', 'app', 'build', 'outputs', 'apk', 'debug',
-  'quadratic-exact-lab-1.4.0-debug.apk');
+  'quadratic-exact-lab-1.4.1-debug.apk');
 const PKG = 'cn.piaochong.quadraticexactlab';
 const PORT = 9222;
 
@@ -377,13 +377,13 @@ let cdp = null;
     t('原生桥 window.QuadAndroid 可用', () => {
       assert(basic.bridge, 'isAndroid() 没有返回 true');
       assert(/^android-/.test(String(basic.androidPlatform)), 'platform() 异常：' + basic.androidPlatform);
-      assert(basic.androidVersionName === '1.4.0', 'versionName 应为 1.4.0，实际 ' + basic.androidVersionName);
+      assert(basic.androidVersionName === '1.4.1', 'versionName 应为 1.4.1，实际 ' + basic.androidVersionName);
       assert(basic.isAndroidClass, '没有加上 is-android 标记');
     });
-    t('样式表已生效且版本号为 1.4.0', () => {
+    t('样式表已生效且版本号为 1.4.1', () => {
       assert(basic.cssLoaded && basic.cssLoaded !== 'rgba(0, 0, 0, 0)', 'body 背景色为空，styles.css 没生效');
-      assert(basic.version === '1.4.0', 'QuadLab.version = ' + basic.version);
-      assert(basic.trigVersion === '1.4.0', 'TrigLab.version = ' + basic.trigVersion);
+      assert(basic.version === '1.4.1', 'QuadLab.version = ' + basic.version);
+      assert(basic.trigVersion === '1.4.1', 'TrigLab.version = ' + basic.trigVersion);
     });
 
     /* ---- 断言 2：真实手机屏上的布局 ---- */
@@ -488,6 +488,168 @@ let cdp = null;
       assert(workspaces.unitInk > 20, '单位圆画布空白（' + workspaces.unitInk + '）');
       assert(workspaces.trigOverflow === 0, '三角函数工作区横向溢出 ' + workspaces.trigOverflow + 'px');
       assert(workspaces.back === 'quad', '切不回二次函数');
+    });
+
+    /* ---- 断言 3.5：v1.4.1 的三样新东西，必须能在真机屏上真的用起来 ----
+       手机上根本没有 √ 键，所以数学键盘不是「锦上添花」，而是唯一入口；
+       设置与使用说明两个弹窗也必须在小屏上放得下、点得到。 */
+    const newUi = await evalIn(cdp, `
+      return (async function () {
+      function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+      var out = {};
+      /* ---- 数学键盘：手机上没有 √ 键，点键盘上的 √ 再补 2，常数项就写成 √2 ---- */
+      out.quadKeys = document.querySelectorAll('#math-keys .mk').length;
+      out.trigKeys = document.querySelectorAll('#trig-math-keys .mk').length;
+      window.QuadLab.setForm('general');
+      await sleep(160);
+      /* 先摆一个干净、必定有解的式子：y = x² + √2（Δ = -4√2 < 0，无实数零点） */
+      window.QuadLab.setState({ form: 'general', values: { general: { a: '1', b: '0', c: '1' } }, domain: 'all' });
+      await sleep(400);
+      out.keypadBaseline = (window.QuadLab.getMarkdown() || '').length;
+
+      var c0 = document.getElementById('in-c');
+      c0.focus();
+      c0.value = '';
+      c0.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(140);
+      var c = document.getElementById('in-c');
+      c.focus();
+      document.querySelector('#math-keys .mk[data-insert="√"]').click();
+      await sleep(60);
+      window.QuadLab.insertMath('2');
+      await sleep(80);
+      out.keypadTyped = document.getElementById('in-c').value;
+      document.getElementById('in-c').dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(520);
+      out.keypadInReport = (window.QuadLab.getMarkdown() || '').indexOf('sqrt{2}') >= 0;
+      out.keypadStateC = window.QuadLab.getState().values.general.c;
+      out.keypadError = document.getElementById('err-slot').textContent.slice(0, 100);
+      window.QuadLab.setState({ form: 'general', values: { general: { a: '1', b: '-2', c: '3' } }, domain: 'all' });
+      await sleep(400);
+      /* 键盘最小键位也要点得到 */
+      var mks = document.querySelectorAll('#math-keys .mk');
+      var minH = 999, minW = 999;
+      Array.prototype.forEach.call(mks, function (b) {
+        var r = b.getBoundingClientRect();
+        if (r.height < minH) minH = r.height;
+        if (r.width < minW) minW = r.width;
+      });
+      out.keypadMin = Math.round(Math.min(minH, minW));
+      /* ---- 结论速览必须排在最上面，且三件事都在 ---- */
+      var md = window.QuadLab.getMarkdown() || '';
+      var head = md.slice(0, md.indexOf('## 二、'));
+      out.quickVertex = head.indexOf('顶点坐标') >= 0;
+      out.quickExtremum = head.indexOf('最小值') >= 0 || head.indexOf('最大值') >= 0;
+      out.quickForms = head.indexOf('三种形式的互化') >= 0;
+      out.quickIsFirst = md.indexOf('## 一、结论速览') >= 0 && md.indexOf('## 一、结论速览') < md.indexOf('## 二、');
+      /* ---- 设置弹窗 ---- */
+      window.QuadLab.openSettings();
+      await sleep(220);
+      var sm = document.getElementById('settings-modal');
+      var sp = sm.querySelector('.modal-panel').getBoundingClientRect();
+      out.settingsOpen = sm.hidden === false;
+      out.settingsFits = sp.left >= -1 && sp.right <= window.innerWidth + 1 && sp.top >= -1;
+      out.settingsNoOverflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+      var closeR = document.getElementById('btn-settings-close').getBoundingClientRect();
+      out.settingsCloseTarget = Math.round(Math.min(closeR.width, closeR.height));
+      /* 在设置里改位数，报告要跟着变（两个工作区共用一个值） */
+      window.QuadLab.setSettings({ decimals: 2 });
+      await sleep(420);
+      out.decimalsInState = window.QuadLab.getSettings().decimals;
+      out.decimalsInInput = document.getElementById('opt-decimals').value;
+      window.QuadLab.setSettings({ decimals: 4 });
+      await sleep(300);
+      document.getElementById('btn-settings-close').click();
+      await sleep(200);
+      out.settingsClosed = sm.hidden === true;
+      /* ---- 使用说明弹窗 ---- */
+      window.QuadLab.openHelp();
+      await sleep(260);
+      var hm = document.getElementById('help-modal');
+      var hr = hm.querySelector('.modal-panel').getBoundingClientRect();
+      out.helpOpen = hm.hidden === false;
+      out.helpFits = hr.left >= -1 && hr.right <= window.innerWidth + 1 && hr.top >= -1;
+      out.helpNoOverflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+      out.helpLen = document.getElementById('help-body').textContent.length;
+      out.helpKatexErrors = document.querySelectorAll('#help-body .katex-error').length;
+      out.helpSaysKeypad = document.getElementById('help-body').textContent.indexOf('数学键盘') >= 0;
+      var hcR = document.getElementById('btn-help-close').getBoundingClientRect();
+      out.helpCloseTarget = Math.round(Math.min(hcR.width, hcR.height));
+      document.getElementById('btn-help-close').click();
+      await sleep(200);
+      out.helpClosed = hm.hidden === true;
+      /* ---- 三角函数工作区里也能写根号 ---- */
+      document.querySelector('#mode-bar [data-mode="trig"]').click();
+      await sleep(420);
+      document.querySelector('#trig-fn-tabs [data-fn="sin"]').click();
+      await sleep(160);
+      /* 函数值输入框只在「我输入函数值」这一档下才露出来 */
+      document.querySelector('#trig-src-tabs [data-src="user"]').click();
+      await sleep(260);
+      var tv = document.getElementById('trig-value');
+      out.trigValueVisible = tv.offsetParent !== null;
+      tv.value = '';
+      tv.focus();
+      document.querySelector('#trig-math-keys .mk[data-insert="√"]').click();
+      await sleep(80);
+      window.QuadLab.insertMath('3/2');
+      await sleep(520);
+      out.trigValueTyped = document.getElementById('trig-value').value;
+      out.trigSqrtMd = window.TrigLab.getMarkdown() || '';
+      out.trigSqrtExact = out.trigSqrtMd.indexOf('sqrt{3}') >= 0;
+      out.trigSqrtAngle60 = out.trigSqrtMd.indexOf('60') >= 0;
+      out.trigOverflowAfter = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+      document.querySelector('#mode-bar [data-mode="quad"]').click();
+      await sleep(300);
+      out.overflowAtEnd = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+      return out;
+      })();
+    `);
+
+    t('数学键盘在真机屏上真的能用（手机打不出 √，这是唯一入口）', () => {
+      assert(newUi.quadKeys >= 10 && newUi.trigKeys >= 10,
+        '两个工作区的键位数量不对：' + newUi.quadKeys + ' / ' + newUi.trigKeys);
+      assert(newUi.quadKeys === newUi.trigKeys,
+        '两个工作区的键盘键位不一样多：' + newUi.quadKeys + ' / ' + newUi.trigKeys);
+      assert(newUi.keypadTyped === '√2', '点 √ 再插 2 之后输入框里是 ' + JSON.stringify(newUi.keypadTyped));
+      assert(newUi.keypadBaseline > 500, '基线报告就不正常，长度 ' + newUi.keypadBaseline);
+      assert(newUi.keypadInReport,
+        '√2 没有被算进报告：状态里是 ' + JSON.stringify(newUi.keypadStateC) +
+        '，提示格：' + JSON.stringify(newUi.keypadError));
+      assert(newUi.keypadMin >= 44, '最小的键位只有 ' + newUi.keypadMin + 'px，手指点不准');
+    });
+    t('结论速览固定排在最上面，三件事齐全', () => {
+      assert(newUi.quickIsFirst, '「一、结论速览」不在最前面');
+      assert(newUi.quickVertex, '结论速览里没有顶点坐标');
+      assert(newUi.quickExtremum, '结论速览里没有最大/最小值');
+      assert(newUi.quickForms, '结论速览里没有三种形式的互化');
+    });
+    t('设置弹窗在真机屏上放得下、点得到、改了就生效', () => {
+      assert(newUi.settingsOpen, '设置弹窗没打开');
+      assert(newUi.settingsFits, '设置面板超出屏幕');
+      assert(newUi.settingsNoOverflow === 0, '设置面板撑出横向滚动 ' + newUi.settingsNoOverflow + 'px');
+      assert(newUi.settingsCloseTarget >= 44, '关闭键只有 ' + newUi.settingsCloseTarget + 'px');
+      assert(newUi.decimalsInState === 2, '设置的位数没写进状态：' + newUi.decimalsInState);
+      assert(newUi.decimalsInInput === '2', '设置的位数没同步到输入框：' + newUi.decimalsInInput);
+      assert(newUi.settingsClosed, '设置弹窗没关掉');
+    });
+    t('使用说明弹窗在真机屏上可读、可关', () => {
+      assert(newUi.helpOpen, '使用说明没打开');
+      assert(newUi.helpFits, '使用说明面板超出屏幕');
+      assert(newUi.helpNoOverflow === 0, '使用说明撑出横向滚动 ' + newUi.helpNoOverflow + 'px');
+      assert(newUi.helpLen > 2000, '说明正文太短：' + newUi.helpLen + ' 字符');
+      assert(newUi.helpKatexErrors === 0, '说明里有 ' + newUi.helpKatexErrors + ' 处公式排版错误');
+      assert(newUi.helpSaysKeypad, '说明里没有讲数学键盘');
+      assert(newUi.helpCloseTarget >= 44, '关闭键只有 ' + newUi.helpCloseTarget + 'px');
+      assert(newUi.helpClosed, '使用说明没关掉');
+    });
+    t('三角函数工作区里也能用键盘写根号并精确反推', () => {
+      assert(newUi.trigValueVisible === true, '「我输入函数值」档位下函数值输入框没露出来');
+      assert(newUi.trigValueTyped === '√3/2', '三角函数输入框里是 ' + JSON.stringify(newUi.trigValueTyped));
+      assert(newUi.trigSqrtExact, '报告里没有 √3');
+      assert(newUi.trigSqrtAngle60, 'sin θ = √3/2 没有反推出 60°');
+      assert(newUi.trigOverflowAfter === 0 && newUi.overflowAtEnd === 0,
+        '收尾时横向溢出 ' + newUi.trigOverflowAfter + ' / ' + newUi.overflowAtEnd + 'px');
     });
 
     /* ---- 断言 4：原生导出真的落盘 ---- */
