@@ -119,10 +119,47 @@ cd android && ./gradlew assembleRelease   # 正式包（需要 android/keystore.
 
 ### 官网
 
-<https://piaochongdeng.github.io/quadratic-exact-lab/>
+官网同时挂在两个地方，内容完全一致：
+
+| 地址 | 说明 |
+| --- | --- |
+| <https://piaochongdeng.github.io/quadratic-exact-lab/> | GitHub Pages，国外访问快 |
+| <http://43.155.128.66/> | 自有服务器（腾讯云首尔），国内 IP 直连快 |
 
 官网是纯静态页，源码就在本仓库的 `docs/` 目录（GitHub Pages 的发布源），
 和在线试用版共用同一套 KaTeX 与配图，不额外引第三方库。
+
+自有服务器那台由 **Caddy** 提供（不是 nginx），站点文件在
+`/srv/quadratic-exact-lab`，配置在 `/etc/caddy/Caddyfile`。
+同机其他服务不受影响：Sub2API 在 8080（docker）、frps 在 7000。
+用 IP 访问只能走 HTTP —— IP 签不出公网证书；以后有域名了，
+把 Caddyfile 里的 `:80` 换成域名，Caddy 会自动申请并续期 HTTPS。
+
+**以后官网改动，部署到服务器只要一条命令**：
+
+```bash
+bash scripts/deploy-site.sh            # 部署 git 里已提交的 docs/
+bash scripts/deploy-site.sh --build    # 先重新生成 docs/ 再部署
+```
+
+脚本做三件事，每一步都会自检、失败就中止：从 git 已提交的 `docs/` 树导出
+（所以服务器上那份永远等于 GitHub Pages 那份）、原子替换站点目录、
+再逐文件比对 sha256 并从外网请求一次确认返回 200。
+`docs/` 下有未提交的改动时它会直接拒绝，避免「以为更新了其实没有」。
+
+脚本里有两条不能删的守卫：
+
+- **`git -c core.autocrlf=false archive`** —— 本机是 Windows 且
+  `core.autocrlf=true`，不显式关掉的话 `git archive` 会把 HTML/CSS/JS 的 LF
+  全转成 CRLF，服务器上的文件就和 GitHub Pages 上的不是同一份字节了
+  （曾量到 `index.html` 多出 525 个 CR 字节）。脚本会检查包内 CR 字节数，
+  不为 0 就中止。
+- **未提交改动的拦截** —— 部署的是 git 里那一份，工作区改了没提交不会生效。
+
+注意**下载区读的是 GitHub Releases API**，所以以后发新版，两个站点的版本号、
+文件名、大小、哈希都会自动跟着变，不需要重新部署。但**安装包本身仍然托管在
+GitHub Releases**（`objects.githubusercontent.com`），国内下载可能慢 ——
+页面加载快不等于下载快。
 
 **下载区的版本号不是写死的**：页面加载时先读 GitHub Releases API 拿最新发布，
 拿到什么就显示什么，所以以后发新版，官网自动跟着变，不用改任何文件。
@@ -216,6 +253,7 @@ quadratic-exact-lab/
 │  ├─ make-screenshots.js    用 Electron 拍应用界面截图（2 倍像素，深/浅两套主题）
 │  ├─ make-site-shots.js     拍官网页面本身，用于人工/视觉复核
 │  ├─ optimize-screens.py    截图转 WebP（1x / @2x），并裁出首屏特写
+│  ├─ deploy-site.sh   把 docs/ 部署到自有服务器（从 git 导出 → 原子替换 → 校验）
 │  └─ push-gitee.ps1   一键同步到 Gitee 镜像
 ├─ www/                ↑ 由 make-www.js 生成的 Android assets（gitignore）
 ├─ desktop/            桌面应用外壳

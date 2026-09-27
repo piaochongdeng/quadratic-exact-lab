@@ -194,5 +194,32 @@ t('首屏顶栏在深色 hero 上是透明的（不能压一条浅色横条）',
   assert(siteCss.indexOf('.topbar.solid') > 0, '缺少滚过 hero 后的实心态');
 });
 
+/* 部署脚本里有两处「删掉也能跑、但会悄悄出错」的地方，钉住它。
+   不是格式偏好，是踩过的坑：
+   - core.autocrlf=false：本机是 Windows 且 core.autocrlf=true，
+     不显式关掉，git archive 会把 HTML/CSS/JS 的 LF 全转成 CRLF，
+     服务器上那份就不再等于 GitHub Pages 那份（曾多出 525 个 CR 字节）。
+   - 未提交改动的拦截：部署的是 git 里那一份，工作区改了没提交不会生效，
+     不拦住就会出现「以为更新了其实没有」。 */
+t('部署脚本保留了「从 git 导出 / 换行符 / 未提交改动」三道守卫', () => {
+  const p = path.join(ROOT, 'scripts', 'deploy-site.sh');
+  assert(fs.existsSync(p), '找不到 scripts/deploy-site.sh');
+  /* 只看真正的命令行。注释里提到这些关键字不算数 —— 这点是实测出来的：
+     一开始直接搜整个文件，把 core.autocrlf=false 从命令里删掉、
+     注释还留着，测试照样通过，等于没测。 */
+  const code = fs.readFileSync(p, 'utf8')
+    .split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+  assert(/^git\b[^\n]*-c core\.autocrlf=false[^\n]*archive\b/m.test(code),
+    'git archive 没带 -c core.autocrlf=false —— 本机 core.autocrlf=true，' +
+    '换行符会被转成 CRLF，服务器与 GitHub Pages 的内容就不再是同一份');
+  assert(/^git\b[^\n]*archive[^\n]*HEAD:docs/m.test(code),
+    '部署脚本不是从 git 已提交的 docs/ 导出的 —— 那样两个站点就不再同源');
+  assert(/tr -cd '\\r'/.test(code),
+    '缺少「包内 CR 字节数必须为 0」的检查');
+  assert(/^if ! git diff --quiet -- docs\//m.test(code),
+    '缺少未提交改动的拦截（不拦就会出现「以为更新了其实没有」）');
+});
+
 console.log('\n  通过 ' + pass + ' 项，失败 ' + fail + ' 项');
 process.exit(fail ? 1 : 0);
