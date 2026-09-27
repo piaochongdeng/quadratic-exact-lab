@@ -187,6 +187,8 @@ async function shoot(win, shot) {
       var r = n.getBoundingClientRect();
       if (r.bottom > 0 && r.top < window.innerHeight) hidden++;
     });
+    var bar = document.querySelector('.topbar');
+    var hero = document.querySelector('.hero');
     return {
       relVer: relVer.trim(), status: status.trim(),
       androidHref: btn ? btn.getAttribute('href') : '',
@@ -194,6 +196,12 @@ async function shoot(win, shot) {
       katex: katexNodes, rawTex: rawTex,
       docH: document.body.scrollHeight, overflowX: overflow,
       hiddenReveal: hidden,
+      /* 顶栏状态：首屏必须透明（压在深色 hero 上），滚过 hero 才变实心。
+         之前用哨兵判断，哨兵被排到 hero 下面的新网格行里，开局就在观察区外，
+         一上来就是实心，透明态从来没出现过——这两个字段就是用来盯住它的。 */
+      topbarSolid: bar ? bar.classList.contains('solid') : null,
+      topbarBg: bar ? getComputedStyle(bar).backgroundColor : '',
+      heroBottom: hero ? Math.round(hero.getBoundingClientRect().bottom) : null,
       innerH: window.innerHeight,
       maxScroll: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
       scrollY: Math.round(window.scrollY),
@@ -208,6 +216,21 @@ async function shoot(win, shot) {
   await wait(400);
   const img = await win.webContents.capturePage();
   fs.writeFileSync(path.join(OUT, shot.name + '.png'), img.toPNG());
+
+  /* 顺带量一下画面最顶上那条的亮度。
+     顶栏「透明」时，如果它其实没压在深色 hero 上（比如 hero 因为
+     在文档流里而被顶栏挤到下面去），透出来的就是 body 的浅色底——
+     DOM 里查 background 还是 rgba(0,0,0,0)、看起来一切正常，
+     只有像素能戳穿。裁一条缩成 1×1 像素，拿到的就是平均值。 */
+  try {
+    const size = img.getSize();
+    const strip = img.crop({ x: 0, y: 0, width: size.width, height: 16 })
+      .resize({ width: 1, height: 1 }).toBitmap();   /* BGRA */
+    const b = strip[0], g = strip[1], r = strip[2];
+    diag.topLum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+  } catch (e) {
+    diag.topLum = null;
+  }
   return diag;
 }
 
@@ -254,6 +277,24 @@ app.whenReady().then(async () => {
     if (diag.overflowX) warns.push('横向溢出');
     if (diag.androidLoading) warns.push('安卓按钮仍是加载态');
     if (diag.hiddenReveal) warns.push(`${diag.hiddenReveal} 处内容没显出来`);
+
+    /* 顶栏必须跟着 hero 走：hero 还在顶栏下面 → 透明；滚过 → 实心。
+       首屏拍到实心（或滚过之后还是透明）都说明这段逻辑坏了。
+       注意裁剪镜头不采集这两个字段，必须按类型判断——
+       undefined !== null 会让守卫失效（踩过）。 */
+    if (typeof diag.topbarSolid === 'boolean' && typeof diag.heroBottom === 'number') {
+      const heroUnderBar = diag.heroBottom > 64;
+      if (heroUnderBar && diag.topbarSolid) {
+        warns.push('hero 还在顶栏下面，顶栏却已是实心（首屏应透明）');
+      }
+      if (!heroUnderBar && !diag.topbarSolid) {
+        warns.push('已滚过 hero，顶栏却没变实心');
+      }
+    }
+    /* 首屏顶栏透明 → 画面最顶上必须是深色 hero，不能是 body 的浅色底 */
+    if (diag.topbarSolid === false && typeof diag.topLum === 'number' && diag.topLum > 90) {
+      warns.push(`顶栏说是透明的，但画面顶上很亮（亮度 ${diag.topLum}，疑似透出了浅色 body 底）`);
+    }
     if (warns.length) bad++;
 
     const size = fs.statSync(path.join(OUT, shot.name + '.png')).size;
@@ -279,9 +320,50 @@ app.whenReady().then(async () => {
     if (diag.androidHref) console.log(`     安卓链接：${diag.androidHref.slice(0, 96)}`);
   }
 
+  /* 顶栏那段的开关必须真的会动。镜头本身只拍到首屏，
+     不跑这一步就没人验证「滚过去以后变实心」这一半。
+     注意：滚动之后要「等一等再读」——scroll 回调和定时测量都是异步的，
+     在同一个同步块里 scrollTo 完立刻读 classList，读到的必然是旧值。 */
+  try {
+    await win.setContentSize(1440, 900);
+    await wait(300);
+    const snap = () => win.webContents.executeJavaScript(`(function(){
+      var bar=document.querySelector('.topbar'), hero=document.querySelector('.hero');
+      return { solid: bar.classList.contains('solid'),
+               bg: getComputedStyle(bar).backgroundColor,
+               heroBottom: Math.round(hero.getBoundingClientRect().bottom) };
+    })()`);
+
+    await win.webContents.executeJavaScript(
+      "(function(){document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);})()");
+    await wait(700);
+    const atTop = await snap();
+
+    await win.webContents.executeJavaScript(`(function(){
+      var h = document.querySelector('.hero').getBoundingClientRect().height;
+      window.scrollTo(0, Math.round(h) + 300); })()`);
+    await wait(900);
+    const past = await snap();
+
+    await win.webContents.executeJavaScript('window.scrollTo(0,0)');
+    await wait(500);
+
+    const okTop = atTop.solid === false;
+    const okPast = past.solid === true;
+    console.log('\n顶栏行为自检');
+    console.log(`  首屏      hero 下沿=${String(atTop.heroBottom).padStart(5)}  solid=${atTop.solid}` +
+      `  bg=${atTop.bg}  ${okTop ? '✓ 透明' : '✗ 应为透明'}`);
+    console.log(`  滚过 hero hero 下沿=${String(past.heroBottom).padStart(5)}  solid=${past.solid}` +
+      `  bg=${past.bg}  ${okPast ? '✓ 实心' : '✗ 应为实心'}`);
+    if (!okTop || !okPast) bad++;
+  } catch (e) {
+    console.log('\n顶栏行为自检：跑失败 ' + e.message);
+    bad++;
+  }
+
   win.destroy();
   server.close();
-  console.log(bad ? `\n有 ${bad} 个镜头异常` : '\n全部镜头正常');
+  console.log(bad ? `\n有 ${bad} 处异常` : '\n全部正常');
   app.exit(bad ? 1 : 0);
 }).catch((e) => {
   console.error(e);

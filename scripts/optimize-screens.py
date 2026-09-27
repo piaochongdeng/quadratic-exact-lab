@@ -23,8 +23,19 @@ PHONE_MAX_WIDTH = 900
 # 坐标是 CSS 像素（在 1441×981 窗口下量的），乘 2 换成源图像素。
 # 裁剪框不写死，从 docs/screens/shots.json 里读截图时量到的真实位置，
 # 以后界面布局改了，裁剪会自己跟上。
+#
+# 首屏那张图后来又从「整个面板」收窄成「画布中间一段」：
+# 面板 982px 宽、首屏右栏只放得下 780px，等于把图缩到 0.79 倍，
+# 画布里的坐标标注本来就只有 11px 左右，缩完更看不清（视觉复核反复说
+# 「标注文字过小、发糊」，还把 1/2 读成 10.5 之类的）。
+# 裁到 540px 宽、仍按 780px 显示，标注就放大到约 1.44 倍，一眼能读。
+# 裁剪范围不是猜的：按颜色在 2 倍原图里定位了顶点标记（暖色 #e0a458）
+# 和两个零点标记（绿色 #6ee7a0），标注重心落在画布内 x≈378~602、
+# y≈29~60 一带，取 x 从 250 到 790 正好把三个标注连同曲线一起框住，
+# 纵向不裁，免得抛物线手臂被切断看着像裁坏了。
 HERO_CROPS = [
-    {'src': 'desktop-quad-dark.png',        'out': 'hero-panel',  'shot': 'desktop-quad-dark',        'from': 'plotPanel', 'pad': 0},
+    {'src': 'desktop-quad-dark.png', 'out': 'hero-panel', 'shot': 'desktop-quad-dark',
+     'from': 'plotRect', 'inset': (250, 0, 190, 0)},
 ]
 
 
@@ -77,10 +88,12 @@ def main():
             print('  ! shots.json 里没有 %s 的 %s，跳过特写 %s' % (c['shot'], c['from'], c['out']))
             continue
         pad = c.get('pad', 0)
-        x = box_src['x'] - pad
-        y = box_src['y'] - pad
-        w = box_src['w'] + pad * 2
-        h = box_src['h'] + pad * 2
+        # inset = (左, 上, 右, 下)，单位 CSS 像素，从基准框往里收
+        il, it, ir, ib = c.get('inset', (0, 0, 0, 0))
+        x = box_src['x'] - pad + il
+        y = box_src['y'] - pad + it
+        w = box_src['w'] + pad * 2 - il - ir
+        h = box_src['h'] + pad * 2 - it - ib
         if c.get('maxh'):
             h = min(h, c['maxh'])
         im = Image.open(src).convert('RGB')

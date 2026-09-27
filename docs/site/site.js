@@ -295,33 +295,29 @@
     var hero = $('.hero');
     if (!hero) return;
 
-    /* 首屏时顶栏透明，压在深色 hero 上；滚过 hero 才切换成浅色磨砂条。
+    /* 首屏时顶栏透明，压在深色 hero 上；滚过 hero 才切换成深色磨砂条。
+       判据：hero 的下沿还在顶栏下面 → 透明；否则 → 实心。
 
-       这里不用 scroll 事件：滚动事件会被浏览器按帧节流，
-       在隐藏窗口/后台标签里可能整段不派发，顶栏就会卡在错误的状态。
-       IntersectionObserver 由渲染管线驱动，状态一定和真实布局一致。
-       做法是在 hero 末尾插一个哨兵，把观察区的上边界下移一个顶栏高度——
-       哨兵越过这条线就说明 hero 已经滚过去了。 */
-    var sentinel = document.createElement('div');
-    sentinel.setAttribute('aria-hidden', 'true');
-    sentinel.style.cssText = 'position:absolute;left:0;width:1px;height:1px;pointer-events:none;';
-    hero.style.position = hero.style.position || 'relative';
-    hero.appendChild(sentinel);
+       驱动方式踩过两次坑，最后选了「定时量 + scroll 立即量」：
+       - scroll 事件在真实浏览器里够用，但隐藏窗口/后台标签会被整段节流掉
+         （拍官网截图的工具就是这么跑页面的：量出来 hero 已经滚到 -237，
+          状态却还停在透明）。
+       - IntersectionObserver 不依赖事件，但观察区只能按百分比收缩，
+         而顶栏本身占着页面最上面 62px，hero 是从 62px 才开始的，
+         把观察区钉在 y=0 一带的话 hero 永远不与之相交，判断恒为「已滚过」。
+         想精确就得按 px 算 rootMargin，还得跟着窗口尺寸重建观察器，不值当。
+       定时量一次 getBoundingClientRect 的开销可以忽略（200ms 一次、只读一个值），
+       换来的是任何环境都算得对；真实浏览器里 scroll 事件负责即时响应。 */
+    var barH = function () { return bar.offsetHeight || 62; };
+    var measure = function () {
+      bar.classList.toggle('solid', hero.getBoundingClientRect().bottom <= barH() + 2);
+    };
 
-    var set = function (on) { bar.classList.toggle('solid', !!on); };
-
-    if (typeof IntersectionObserver === 'function') {
-      var io = new IntersectionObserver(function (entries) {
-        set(!entries[0].isIntersecting);
-      }, { rootMargin: '-' + (bar.offsetHeight + 2) + 'px 0px 0px 0px', threshold: 0 });
-      io.observe(sentinel);
-    } else {
-      var onScroll = function () {
-        set(window.scrollY > Math.max(8, hero.offsetHeight - bar.offsetHeight - 4));
-      };
-      onScroll();
-      window.addEventListener('scroll', onScroll, { passive: true });
-    }
+    measure();
+    window.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    window.addEventListener('load', measure);
+    setInterval(measure, 200);
   }
 
   /* ===================== 图片灯箱 =====================

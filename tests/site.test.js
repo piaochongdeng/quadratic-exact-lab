@@ -91,6 +91,54 @@ t('KaTeX 只依赖 renderToString，不引用不存在的 auto-render', () => {
   assert(fs.existsSync(path.join(DOCS, 'app', 'vendor', 'katex', 'katex.min.js')), '缺 KaTeX');
 });
 
+/* 读 WebP 的真实像素尺寸（VP8 / VP8L / VP8X 三种头都要认）。
+   首屏大图是靠 srcset 的宽度描述符挑文件的，描述符和图片实际宽度对不上时，
+   浏览器会挑错文件、按错误的比例占位，页面会跳一下——这种错很隐蔽，
+   只有把描述符和真实尺寸对一遍才能发现。 */
+function webpSize(file) {
+  const b = fs.readFileSync(file);
+  const tag = b.toString('ascii', 12, 16);
+  if (tag === 'VP8X') {
+    return { w: (b[24] | (b[25] << 8) | (b[26] << 16)) + 1,
+             h: (b[27] | (b[28] << 8) | (b[29] << 16)) + 1 };
+  }
+  if (tag === 'VP8L') {
+    const bits = b.readUInt32LE(21);
+    return { w: (bits & 0x3fff) + 1, h: ((bits >> 14) & 0x3fff) + 1 };
+  }
+  if (tag === 'VP8 ') {
+    return { w: b.readUInt16LE(26) & 0x3fff, h: b.readUInt16LE(28) & 0x3fff };
+  }
+  throw new Error('认不出的 WebP 头：' + tag);
+}
+
+t('首屏大图的 srcset 宽度描述符与图片真实尺寸一致', () => {
+  const m = html.match(/srcset="([^"]*hero-panel[^"]*)"/);
+  assert(m, '首页里找不到 hero-panel 的 srcset');
+  const items = m[1].split(',').map((x) => x.trim().split(/\s+/));
+  assert(items.length >= 2, 'srcset 至少要有 1x 和 2x 两个候选');
+  items.forEach(([url, desc]) => {
+    const declared = parseInt(desc, 10);
+    assert(declared > 0, url + ' 缺少宽度描述符');
+    const p = path.join(DOCS, url);
+    assert(fs.existsSync(p), 'srcset 里的 ' + url + ' 不存在');
+    const real = webpSize(p);
+    assert(real.w === declared,
+      url + ' 描述符写的是 ' + declared + 'w，图片实际宽 ' + real.w);
+  });
+  /* width/height 属性决定占位比例，也必须和真图一致，否则加载时会跳版。
+     注意要在 <img ... hero-panel ...> 这一段里找：
+     整页直接搜 width="N" height="N" 会先撞上行内 SVG 图标（15×15）。 */
+  const imgTag = html.match(/<img[^>]*hero-panel[^>]*>/);
+  assert(imgTag, '找不到首屏大图的 <img>');
+  const dim = imgTag[0].match(/width="(\d+)"\s+height="(\d+)"/);
+  assert(dim, '首屏大图缺少 width/height 属性');
+  const real1x = webpSize(path.join(DOCS, items[0][0]));
+  assert(parseInt(dim[1], 10) === real1x.w && parseInt(dim[2], 10) === real1x.h,
+    'width/height 属性（' + dim[1] + '×' + dim[2] + '）与图片实际尺寸（' +
+    real1x.w + '×' + real1x.h + '）不一致');
+});
+
 t('断网兜底快照存在，且与 site.js 的 FALLBACK 指同一个文件', () => {
   /* 曾经写错路径：生成到 docs/releases.json，页面却 fetch site/releases.json，
      线上 404，断网兜底等于没有。加自检防止再犯。 */

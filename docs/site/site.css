@@ -11,6 +11,9 @@
 :root {
   /* 浅色（与 App 浅色主题一致） */
   --bg: #f4f2ee;
+  /* 顶栏高度（.topbar .wrap 的 62px + 1px 下边框）。
+     hero 要靠它把自己往上垫，钻到顶栏下面去——见 .hero 的 margin-top。 */
+  --bar-h: 63px;
   --card: #ffffff;
   --card-soft: #faf9f7;
   --line: #e3ded6;
@@ -195,7 +198,16 @@ html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .hero {
   position: relative; overflow: hidden;
   background: var(--d-bg); color: var(--d-ink);
-  padding: 76px 0 0;
+  /* 顶栏是 sticky、还在正常文档流里，所以它占着页面最上面 63px，
+     hero 原本是从 63px 才开始的。顶栏设成透明时，透出来的是 body 的
+     浅色底 —— 于是深色首屏头顶上永远压着一条米白横条（视觉复核反复
+     指出「米白条与深色主体割裂」，量了像素才确认：最上面 20 行平均
+     RGB 是 (244,242,238)，正是 body 的底色）。
+     把 hero 上提一个顶栏高度、再把这段补进 padding-top，
+     hero 就真正钻到顶栏底下，透明顶栏才透出深色。
+     上提多少、padding 补多少，两者相等，所以下方内容位置不变。 */
+  margin-top: calc(-1 * var(--bar-h));
+  padding: calc(76px + var(--bar-h)) 0 0;
 }
 /* 方格纸纹理：数学工具该有的底子 */
 .hero::before {
@@ -582,7 +594,7 @@ body.lb-open { overflow: hidden; }
   :root { --pad: 18px; }
   .nav { display: none; }
   .topbar-cta { display: inline-flex; }
-  .hero { padding-top: 48px; }
+  .hero { padding-top: calc(48px + var(--bar-h)); }
   .hero-shot { margin-left: 0; }
   .section { padding: 58px 0; }
   .section.tight { padding: 46px 0; }
