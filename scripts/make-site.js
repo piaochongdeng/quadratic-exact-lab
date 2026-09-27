@@ -4,7 +4,8 @@
  * 把官网要发布的东西拼到 docs/ 下（GitHub Pages 的发布目录）：
  *
  *   docs/app/**          在线试用版（与桌面/安卓同一套代码，直接复用 www/）
- *   docs/releases.json   最新发布快照，作为官网下载区的兜底数据
+ *   docs/site/releases.json   最新发布快照，作为官网下载区的兜底数据
+ *                             （路径必须和 site.js 里的 FALLBACK 一致）
  *   docs/.nojekyll       关掉 Jekyll，避免它多管闲事
  *
  * 官网页面本身（docs/index.html、docs/site/**）是手写的，不由本脚本生成。
@@ -202,8 +203,12 @@ function pickAsset(assets, kind) {
 }
 
 async function writeReleasesJson() {
-  console.log('\n[3/4] 发布快照 → docs/releases.json');
-  const dst = path.join(OUT, 'releases.json');
+  /* 必须和 site.js 里的 FALLBACK 指向同一个文件：
+     之前写的是 docs/releases.json，而页面 fetch 的是 site/releases.json，
+     线上一直 404，断网兜底等于没有（上线后 curl 才发现）。 */
+  console.log('\n[3/4] 发布快照 → docs/site/releases.json');
+  const dst = path.join(OUT, 'site', 'releases.json');
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
 
   if (OFFLINE) {
     warn('--offline：保持现有 releases.json 不变');
@@ -267,6 +272,20 @@ function finish() {
     bad('docs/index.html 不存在——官网首页是手写的，别把它删了');
   } else {
     ok('docs/index.html 就位');
+  }
+
+  /* 兜底快照必须和 site.js 的 FALLBACK 指同一个文件，
+     否则断网时页面白等一场（曾经写错路径，线上 404）。 */
+  const siteJsPath = path.join(OUT, 'site', 'site.js');
+  if (fs.existsSync(siteJsPath)) {
+    const m = fs.readFileSync(siteJsPath, 'utf8').match(/FALLBACK\s*=\s*'([^']+)'/);
+    if (!m) {
+      bad('site.js 里找不到 FALLBACK 定义');
+    } else if (!fs.existsSync(path.join(OUT, m[1]))) {
+      bad('site.js 的兜底 ' + m[1] + ' 不存在（断网时下载区会没有数据）');
+    } else {
+      ok('兜底快照 ' + m[1] + ' 就位（与 site.js 的 FALLBACK 一致）');
+    }
   }
 
   /* 发布前自检：页面里引用的本地文件是否都真的存在 */

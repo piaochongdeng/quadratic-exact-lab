@@ -91,6 +91,14 @@ t('KaTeX 只依赖 renderToString，不引用不存在的 auto-render', () => {
   assert(fs.existsSync(path.join(DOCS, 'app', 'vendor', 'katex', 'katex.min.js')), '缺 KaTeX');
 });
 
+t('断网兜底快照存在，且与 site.js 的 FALLBACK 指同一个文件', () => {
+  /* 曾经写错路径：生成到 docs/releases.json，页面却 fetch site/releases.json，
+     线上 404，断网兜底等于没有。加自检防止再犯。 */
+  const m = siteJs.match(/FALLBACK\s*=\s*'([^']+)'/);
+  assert(m, 'site.js 里找不到 FALLBACK');
+  assert(fs.existsSync(path.join(DOCS, m[1])), 'FALLBACK 指向的 ' + m[1] + ' 不存在');
+});
+
 t('发布目录带 .nojekyll（否则 GitHub Pages 会吃掉下划线开头的文件）', () => {
   assert(fs.existsSync(path.join(DOCS, '.nojekyll')), '缺少 docs/.nojekyll');
 });
