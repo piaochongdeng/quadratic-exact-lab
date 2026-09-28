@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · trig-report.js  (v1.4.1)
+ * quadratic-exact-lab · trig-report.js  (v1.4.2)
  * ------------------------------------------------------------------
  * 把「角度 / 函数值 + 一条边」整理成一份完整的 Markdown 解析报告。
  * 纯函数、无副作用；浏览器与 Node.js 通用，因此可以直接单元测试。
@@ -540,5 +540,5 @@
     };
   }
 
-  return { build: build, version: '1.4.1', clampDigits: clampDigits };
+  return { build: build, version: '1.4.2', clampDigits: clampDigits };
 });

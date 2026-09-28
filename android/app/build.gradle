@@ -21,8 +21,8 @@ android {
         applicationId 'cn.piaochong.quadraticexactlab'
         minSdk 24                 // Android 7.0，覆盖绝大多数在网设备
         targetSdk 35
-        versionCode 10401
-        versionName '1.4.1'
+        versionCode 10402
+        versionName '1.4.2'
 
         resourceConfigurations += ['zh', 'en']
     }

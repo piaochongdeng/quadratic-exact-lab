@@ -26,7 +26,7 @@
 | 包名 | `cn.piaochong.quadraticexactlab` |
 | `compileSdk` / `targetSdk` | 35（Android 15） |
 | `minSdk` | 24（Android 7.0） |
-| 版本 | `versionName 1.4.1` / `versionCode 10401` |
+| 版本 | `versionName 1.4.2` / `versionCode 10402` |
 | 依赖 | **无**（不用 AndroidX / AppCompat，纯系统框架） |
 | 权限 | **无** |
 | APK 体积 | 正式包 689 KB / 调试包 751 KB |

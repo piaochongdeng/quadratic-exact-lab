@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · ui.js  (v1.0.0)
+ * quadratic-exact-lab · ui.js  (v1.4.2)
  * ------------------------------------------------------------------
  * 界面逻辑：输入 → 精确计算 → Markdown 报告 + 图像可视化。
  * 依赖同目录下的 engine.js / report.js / markdown.js 与 vendor/katex。
@@ -1642,7 +1642,7 @@
       return true;
     },
 
-    version: '1.4.1'
+    version: '1.4.2'
   };
 
   /* ================= 桌面版菜单事件 ================= */

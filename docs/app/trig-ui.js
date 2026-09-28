@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · trig-ui.js  (v1.4.1)
+ * quadratic-exact-lab · trig-ui.js  (v1.4.2)
  * ------------------------------------------------------------------
  * 三角函数工作区的界面逻辑：
  *   · 输入：sin / cos / tan + 角度 或 用户自填的函数值 + 已知的一条边 + 小数精度
@@ -888,7 +888,7 @@
         return out.toDataURL('image/png');
       } catch (e) { return null; }
     },
-    version: '1.4.1'
+    version: '1.4.2'
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

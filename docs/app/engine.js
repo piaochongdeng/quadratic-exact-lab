@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · engine.js  (v1.0.0)
+ * quadratic-exact-lab · engine.js  (v1.4.2)
  * ------------------------------------------------------------------
  * 精确二次函数计算引擎
  *   · Frac   —— 任意精度有理数（基于 BigInt，自动约分）

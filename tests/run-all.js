@@ -11,6 +11,7 @@ const SUITES = [
   ['help.test.js', '使用说明（文档同源 / 渲染 / 功能对齐）'],
   ['trig.test.js', '三角函数与直角三角形（精确值 / 反推 / 报告排版）'],
   ['dom-check.js', '页面与脚本 id 一致性'],
+  ['version.test.js', '版本号一致性（源码 / 横幅 / Android / 试用版）'],
   ['site.test.js', '官网（发布目录完整性 / 下载链接 / 引用可达）'],
   ['desktop.test.js', '桌面版（Electron）端到端'],
   ['android.test.js', 'Android（真机 / 模拟器）端到端']

@@ -1,5 +1,5 @@
 /*!
- * quadratic-exact-lab · trig.js  (v1.4.1)
+ * quadratic-exact-lab · trig.js  (v1.4.2)
  * ------------------------------------------------------------------
  * 三角函数与直角三角形精确计算引擎
  * 纯原创实现，零第三方依赖，浏览器与 Node.js 通用。
@@ -283,7 +283,7 @@
    * ========================================================== */
 
   return {
-    version: '1.4.1',
+    version: '1.4.2',
     TABLE: TABLE,
     normDeg: normDeg,
     degText: degText,
